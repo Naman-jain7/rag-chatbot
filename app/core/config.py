@@ -74,7 +74,6 @@ class LLMSettings(BaseSettings):
 
 
 class EmbeddingSettings(BaseSettings):
-
     HUGGINGFACEHUB_API_TOKEN: str = Field(..., validation_alias="HUGGINGFACEHUB_API_TOKEN")
     EMBEDDING_LLM: str = Field(..., validation_alias="EMBEDDING_LLM")
     EMBEDDING_LLM_DIMENSION: str = Field(..., validation_alias="EMBEDDING_LLM_DIMENSION")
@@ -97,13 +96,11 @@ class DatabaseConfig(BaseSettings):
             }
         return values
 
-
 class ServicesSettings(BaseSettings):
     ALPHAVANTAGE_STOCK_API_KEY: str = Field(..., validation_alias="ALPHAVANTAGE_STOCK_API_KEY")
 
     CURRENCY_EXCHANGE_URL: str = Field(..., validation_alias="CURRENCY_EXCHANGE_URL")
     CURRENCY_EXCHANGE_API_KEY: str = Field(..., validation_alias="CURRENCY_EXCHANGE_API_KEY")
-
 
 class AppConfig(BaseSettings):
     APP_NAME: str = Field(..., validation_alias="APP_NAME")
