@@ -3,13 +3,13 @@ import tempfile
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from app.core.config import settings, RAW_DB_PATH
-from app.vector_db.chroma_db import ChromaManager
+from app.core.config import RAW_DB_PATH, settings
 from app.db.manager import db_manager
+from app.vector_db.chroma_db import ChromaManager
 from src.utils.logger import APP_LOGGER
 
 router = APIRouter()

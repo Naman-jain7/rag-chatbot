@@ -1,5 +1,6 @@
 from fastapi import APIRouter
-from app.api import ingest_docs, list_docs, delete_docs, auth, chat
+
+from app.api import auth, chat, delete_docs, ingest_docs, list_docs
 
 api_router = APIRouter()
 

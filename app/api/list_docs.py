@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+
 from app.db.manager import db_manager
 from src.utils.logger import APP_LOGGER
 

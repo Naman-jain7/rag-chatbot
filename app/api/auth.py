@@ -1,15 +1,16 @@
 import json
-import bcrypt
-import jwt
 from datetime import datetime, timedelta
 from typing import Optional
+
+import bcrypt
+import jwt
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.schemas.user_profile import UserSignup, TokenResponse
 from app.db.manager import db_manager
+from app.schemas.user_profile import TokenResponse, UserSignup
+from src.utils.exception import AppException, ConflictError, UnauthenticatedError
 from src.utils.logger import APP_LOGGER
-from src.utils.exception import UnauthenticatedError, ConflictError, AppException
 
 router = APIRouter()
 

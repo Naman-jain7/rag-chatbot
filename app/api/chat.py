@@ -1,7 +1,9 @@
 import asyncio
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
 from src.graphs.chains import graph
 
 router = APIRouter()
@@ -26,7 +28,7 @@ async def chat_endpoint(request: ChatRequest):
             }
             async def run_graph():
                 try:
-                    await graph.ainvoke(initial_state)
+                    await graph.ainvoke(initial_state) # type: ignore
                 except Exception as e:
                     await queue.put(f"\n[Graph Error: {str(e)}]")
                 finally:

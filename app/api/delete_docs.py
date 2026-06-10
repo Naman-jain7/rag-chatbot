@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Body, HTTPException
 from typing import List
 
-from app.core.config import settings, RAW_DB_PATH
-from app.vector_db.chroma_db import ChromaManager
+from fastapi import APIRouter, Body, HTTPException
+
+from app.core.config import RAW_DB_PATH, settings
 from app.db.manager import db_manager
+from app.vector_db.chroma_db import ChromaManager
 from src.utils.logger import APP_LOGGER
 
 router = APIRouter()
