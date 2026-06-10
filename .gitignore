@@ -1,0 +1,28 @@
+# Vector DB local storage
+/data/vector_db/*
+!/data/vector_db/.gitkeep
+
+# LangChain/LangSmith traces
+.langchain.log
+
+# LLM Weights (if stored locally)
+*.bin
+*.gguf
+
+# Standard Python
+.env
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Logs - Track the folder, ignore the contents
+/logs/*
+!/logs/.gitkeep
+# If you want to keep specific log placeholders:
+!/logs/api.log
+!/logs/training.log
+src/rag_chatbot.egg-info
+
+personal/
+data/
