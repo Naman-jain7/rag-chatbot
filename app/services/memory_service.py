@@ -14,6 +14,27 @@ class MemoryService:
             MEMORY_LOGGER.error(f"Failed to initialize MemoryService: {e}")
             self.client = None
 
+    def store(self, user_id: int, query: str, response: str, metadata: Optional[Dict[str, Any]] = None):
+        """
+        Save Q&A pair to mem0 after generation.
+        """
+        if not self.client:
+            return
+
+        try:
+            # We add both query and response as context
+            context = f"User: {query}\nAssistant: {response}"
+            
+            # Using memory client to add the interaction
+            kwargs = {"user_id": str(user_id)}
+            if metadata:
+                kwargs["metadata"] = metadata # type: ignore
+
+            self.client.add(context, **kwargs) # type: ignore
+            MEMORY_LOGGER.info(f"Successfully stored memory for user {user_id}.")
+        except Exception as e:
+            MEMORY_LOGGER.error(f"Error storing memory for user {user_id}: {e}")
+
     def get_relevant(self, user_id: int, query: str) -> str:
         """
         Searches mem0 for memories relevant to the current query.
@@ -41,27 +62,6 @@ class MemoryService:
         except Exception as e:
             MEMORY_LOGGER.error(f"Error retrieving memories for user {user_id}: {e}")
             return ""
-
-    def store(self, user_id: int, query: str, response: str, metadata: Optional[Dict[str, Any]] = None):
-        """
-        Save Q&A pair to mem0 after generation.
-        """
-        if not self.client:
-            return
-
-        try:
-            # We add both query and response as context
-            context = f"User: {query}\nAssistant: {response}"
-            
-            # Using memory client to add the interaction
-            kwargs = {"user_id": str(user_id)}
-            if metadata:
-                kwargs["metadata"] = metadata # type: ignore
-
-            self.client.add(context, **kwargs) # type: ignore
-            MEMORY_LOGGER.info(f"Successfully stored memory for user {user_id}.")
-        except Exception as e:
-            MEMORY_LOGGER.error(f"Error storing memory for user {user_id}: {e}")
 
     def get_all(self, user_id: int) -> List[Dict[str, Any]]:
         """

@@ -12,7 +12,7 @@ from src.graphs.state import GraphState
 from src.graphs.tools import tools
 from src.llm.providers import providers_list
 from src.llm.resilience import ResilientLLMManager
-from src.prompts.workflow_prompts import (
+from prompts.prompts import (
     EVALUATE_EVIDENCE_PROMPT,
     GENERATE_ANSWER_PROMPT,
     REWRITE_QUERY_PROMPT,
