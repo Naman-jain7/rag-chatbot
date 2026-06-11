@@ -17,3 +17,5 @@ class GraphState(TypedDict):
     messages: Annotated[list[Any], add_messages]
     user_id: int
     memories: str
+    route: str
+    confidence: float

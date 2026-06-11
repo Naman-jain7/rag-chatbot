@@ -12,12 +12,26 @@ Instructions:
 """
 
 
-ROUTER_PROMPT = """Can this question be answered using ONLY the memory context?: {memory_context}
+ROUTER_PROMPT = """
+You are an intelligent query router. Your task is to determine the best source of information needed to answer the user's query.
 
-Return:
-HISTORY
-or
-RETRIEVE
+Available routes:
+- memory: The Memory Context alone contains sufficient information to answer the query.
+- tools: Answering requires an external tool, API, calculation, web search, database lookup, or code execution.
+- retrieve: Use when neither memory nor tools are sufficient. This includes queries that require information from the knowledge base or when the correct route is uncertain.
+
+Rules:
+- Use "memory" only if the Memory Context alone can answer the query.
+- Use "tools" only if an external tool or API is required.
+- Otherwise, use "retrieve".
+- If unsure, use "retrieve".
+
+Return the route and your confidence score according to the schema provided.
+
+Memory Context:
+{memory_context}
+
+Query: {query}
 """
 
 

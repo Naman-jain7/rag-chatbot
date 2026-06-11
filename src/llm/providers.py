@@ -1,6 +1,7 @@
 from typing import Any, AsyncIterator, Dict, List
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.output_parsers import PydanticOutputParser
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
@@ -67,9 +68,16 @@ class OpenRouterProvider(BaseLLMProvider):
     @traceable(run_type="llm", name="OpenRouter_Structured")
     async def generate_structured(self, messages: List[Dict], schema: type, **kwargs):
         lc_messages = _convert_messages(messages)
+        parser = PydanticOutputParser(pydantic_object=schema)
+        
+        if lc_messages and isinstance(lc_messages[-1], HumanMessage):
+            lc_messages[-1].content = f"{lc_messages[-1].content}\n\n{parser.get_format_instructions()}"
+        else:
+            lc_messages.append(HumanMessage(content=parser.get_format_instructions()))
+            
         try:
-            structured_llm = self.llm.with_structured_output(schema) # type: ignore
-            return await structured_llm.ainvoke(lc_messages, **kwargs)
+            response = await self.llm.ainvoke(lc_messages, **kwargs)
+            return parser.invoke(response)
         except Exception as e:
             LLM_LOGGER.error("OpenRouter error during generate_structured: %s", e, exc_info=True)
             raise ExternalServiceError(f"OpenRouter structured generation failed: {str(e)}")
@@ -131,7 +139,7 @@ class OllamaProvider(BaseLLMProvider):
     def __init__(self, config: ProviderConfig) -> None:
         super().__init__(config)
         self._config = config
-        self.endpoint = "https://api.ollama.cloud/v1"
+        self.endpoint = "https://ollama.com/v1"
         self.llm = ChatOpenAI(
             model=self._config.model,
             api_key=self._config.api_key or "ollama", # type: ignore
@@ -159,9 +167,16 @@ class OllamaProvider(BaseLLMProvider):
     @traceable(run_type="llm", name="Ollama_Structured")
     async def generate_structured(self, messages: List[Dict], schema: type, **kwargs):
         lc_messages = _convert_messages(messages)
+        parser = PydanticOutputParser(pydantic_object=schema)
+        
+        if lc_messages and isinstance(lc_messages[-1], HumanMessage):
+            lc_messages[-1].content = f"{lc_messages[-1].content}\n\n{parser.get_format_instructions()}"
+        else:
+            lc_messages.append(HumanMessage(content=parser.get_format_instructions()))
+            
         try:
-            structured_llm = self.llm.with_structured_output(schema) # type: ignore
-            return await structured_llm.ainvoke(lc_messages, **kwargs)
+            response = await self.llm.ainvoke(lc_messages, **kwargs)
+            return parser.invoke(response)
         except Exception as e:
             LLM_LOGGER.error("Ollama error during generate_structured: %s", e, exc_info=True)
             raise ExternalServiceError(f"Ollama structured generation failed: {str(e)}")
@@ -186,7 +201,9 @@ def _create_provider(p_dict: dict):
         max_attempts=p_dict.get("max_attempts", 3),
         circuit_breaker_threshold=p_dict.get("circuit_threshold", 5),
         circuit_breaker_cooldown=p_dict.get("circuit_cooldown", 30.0),
+        tier=p_dict.get("tier", 'slow'),
     )
+
     if cfg.name == "openrouter":
         return OpenRouterProvider(cfg)
     elif cfg.name == "gemini":
@@ -199,3 +216,6 @@ def _create_provider(p_dict: dict):
 
 sorted_provider_dicts = sorted(LLM_PROVIDERS, key=lambda x: x.get("priority", 99))
 providers_list = [_create_provider(p) for p in sorted_provider_dicts]
+
+fast_providers = [p for p in providers_list if p._config.tier=='fast']
+slow_providers = [p for p in providers_list if p._config.tier=='slow']

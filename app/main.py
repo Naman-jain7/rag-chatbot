@@ -35,8 +35,12 @@ async def lifespan(app: FastAPI):
                 user_id INT REFERENCES users(id) ON DELETE CASCADE,
                 filename VARCHAR(255) NOT NULL,
                 doc_id VARCHAR(255) NOT NULL,
+                file_hash VARCHAR(64),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+        """)
+        await db_manager.execute_command("""
+            ALTER TABLE user_documents ADD COLUMN IF NOT EXISTS file_hash VARCHAR(64);
         """)
         APP_LOGGER.info("Database tables verified.")
     except Exception as e:

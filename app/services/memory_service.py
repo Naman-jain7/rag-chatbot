@@ -41,26 +41,29 @@ class MemoryService:
         Returns a formatted string of the retrieved memories.
         """
         if not self.client:
+            MEMORY_LOGGER.warning("MemoryService client is None, skipping retrieval.")
             return ""
 
         try:
-            # Note: user_id must be a string for mem0
-            results = self.client.search(query, filters={"user_id": str(user_id)})
-            
+            data = self.client.search(query, filters={"user_id": str(user_id)})
+            results = data.get("results", []) if isinstance(data, dict) else data
+            MEMORY_LOGGER.info(f"Search for user {user_id} query='{query}' returned {len(results)} results")
+
             if not results:
                 return ""
-                
+
             memories = []
             for r in results:
                 if isinstance(r, dict):
                     memory_text = r.get("memory", r.get("text", str(r)))
                 else:
                     memory_text = getattr(r, "memory", getattr(r, "text", str(r)))
+                MEMORY_LOGGER.info(f"  -> memory: {memory_text[:200]}")
                 memories.append(f"- {memory_text}")
-                
+
             return "\n".join(memories)
         except Exception as e:
-            MEMORY_LOGGER.error(f"Error retrieving memories for user {user_id}: {e}")
+            MEMORY_LOGGER.error(f"Error retrieving memories for user {user_id}: {e}", exc_info=True)
             return ""
 
     def get_all(self, user_id: int) -> List[Dict[str, Any]]:

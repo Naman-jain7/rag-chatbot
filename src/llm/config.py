@@ -7,16 +7,12 @@ class ProviderConfig(BaseModel):
     model: str
     api_key: str | None
     base_url: Optional[str] = None
-    priority: int  # lower = tried first
+    priority: int           # lower = tried first
     timeout: float = 30.0
     max_attempts: int = 3
     circuit_breaker_threshold: int = 5
     circuit_breaker_cooldown: float = 30.0
-
-
-class LLMRouterConfig(BaseModel):
-    default_model: str
-    providers: list[ProviderConfig]  # sorted by priority in validator
+    tier: str = 'slow'
 
 
 class RetryConfig:

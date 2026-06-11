@@ -20,6 +20,7 @@ class LLMSettings(BaseSettings):
     OPENROUTER_MAX_ATTEMPTS: int = Field(..., validation_alias="OPENROUTER_MAX_ATTEMPTS")
     OPENROUTER_CIRCUIT_THRESHOLD: int = Field(..., validation_alias="OPENROUTER_CIRCUIT_THRESHOLD")
     OPENROUTER_CIRCUIT_COOLDOWN: int = Field(..., validation_alias="OPENROUTER_CIRCUIT_COOLDOWN")
+    OPENROUTER_TIER: str = Field(..., validation_alias="OPENROUTER_TIER")
 
     GEMINI_PROVIDER_NAME: str = Field(..., validation_alias="GEMINI_PROVIDER_NAME")
     GEMINI_MODEL_NAME: str = Field(..., validation_alias="GEMINI_MODEL_NAME")
@@ -29,6 +30,7 @@ class LLMSettings(BaseSettings):
     GEMINI_MAX_ATTEMPTS: int = Field(..., validation_alias="GEMINI_MAX_ATTEMPTS")
     GEMINI_CIRCUIT_THRESHOLD: int = Field(..., validation_alias="GEMINI_CIRCUIT_THRESHOLD")
     GEMINI_CIRCUIT_COOLDOWN: int = Field(..., validation_alias="GEMINI_CIRCUIT_COOLDOWN")
+    GEMINI_TIER: str = Field(..., validation_alias="GEMINI_TIER")
 
     OLLAMA_PROVIDER_NAME: str = Field(..., validation_alias="OLLAMA_PROVIDER_NAME")
     OLLAMA_MODEL_NAME: str = Field(..., validation_alias="OLLAMA_MODEL_NAME")
@@ -38,6 +40,7 @@ class LLMSettings(BaseSettings):
     OLLAMA_MAX_ATTEMPTS: int = Field(..., validation_alias="OLLAMA_MAX_ATTEMPTS")
     OLLAMA_CIRCUIT_THRESHOLD: int = Field(..., validation_alias="OLLAMA_CIRCUIT_THRESHOLD")
     OLLAMA_CIRCUIT_COOLDOWN: int = Field(..., validation_alias="OLLAMA_CIRCUIT_COOLDOWN")
+    OLLAMA_TIER: str = Field(..., validation_alias="OLLAMA_TIER")
 
     MAX_TOKENS: int = Field(..., validation_alias="MAX_TOKENS")
     TEMPERATURE: float = Field(..., validation_alias="TEMPERATURE")
@@ -134,6 +137,7 @@ LLM_PROVIDERS = [
         "max_attempts": settings.llm.GEMINI_MAX_ATTEMPTS,
         "circuit_threshold": settings.llm.GEMINI_CIRCUIT_THRESHOLD,
         "circuit_cooldown": settings.llm.GEMINI_CIRCUIT_COOLDOWN,
+        "tier": settings.llm.GEMINI_TIER,
     },
     {
         "name": settings.llm.OPENROUTER_PROVIDER_NAME,
@@ -144,6 +148,7 @@ LLM_PROVIDERS = [
         "max_attempts": settings.llm.OPENROUTER_MAX_ATTEMPTS,
         "circuit_threshold": settings.llm.OPENROUTER_CIRCUIT_THRESHOLD,
         "circuit_cooldown": settings.llm.OPENROUTER_CIRCUIT_COOLDOWN,
+        "tier": settings.llm.OPENROUTER_TIER,
     },
     {
         "name": settings.llm.OLLAMA_PROVIDER_NAME,
@@ -154,6 +159,7 @@ LLM_PROVIDERS = [
         "max_attempts": settings.llm.OLLAMA_MAX_ATTEMPTS,
         "circuit_threshold": settings.llm.OLLAMA_CIRCUIT_THRESHOLD,
         "circuit_cooldown": settings.llm.OLLAMA_CIRCUIT_COOLDOWN,
+        "tier": settings.llm.OLLAMA_TIER,
     },
 ]
 

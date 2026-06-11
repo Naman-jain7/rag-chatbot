@@ -3,26 +3,49 @@ from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from langsmith import traceable
 
 from app.core.config import RAW_DB_PATH, settings
-from app.schemas.workflow import EvidenceEvaluation
+from app.schemas.workflow import EvidenceEvaluation, QueryRouter
 from app.vector_db.chroma_db import ChromaManager
 from app.services.memory_service import memory_service
 from src.graphs.state import GraphState
 from src.graphs.tools import tools
-from src.llm.providers import providers_list
+from src.llm.providers import fast_providers, slow_providers
 from src.llm.resilience import ResilientLLMManager
-from prompts.prompts import (
+from src.prompts.prompts import (
     EVALUATE_EVIDENCE_PROMPT,
     GENERATE_ANSWER_PROMPT,
     REWRITE_QUERY_PROMPT,
+    ROUTER_PROMPT,
 )
 from src.utils.logger import LLM_LOGGER
 
 load_dotenv()
 
 
-llm_manager = ResilientLLMManager(providers=providers_list)  # type: ignore
+fast_llm = ResilientLLMManager(providers=fast_providers)  # type: ignore
+slow_llm = ResilientLLMManager(providers=slow_providers)  # type: ignore
+
+
+async def route_query(state: GraphState):
+    print("--- ROUTING QUERY ---")
+    query = state["query"]
+    memory_context = state.get("memories", "")
+    prompt = ROUTER_PROMPT.format(query=query, memory_context=memory_context)
+    msg = [{"role": "user", "content": prompt}]
+    
+    try:
+        response = await fast_llm.generate_structured(messages=msg, schema=QueryRouter)
+        route = response.route.value # type: ignore
+        confidence = response.confidence_score # type: ignore
+    except Exception as e:
+        LLM_LOGGER.error(f"Error routing query: {e}")
+        route = "retrieve"
+        confidence = 1.0
+
+    print(f"--- ROUTE: {route} | CONFIDENCE: {confidence} ---")
+    return {"route": route, "confidence": confidence}
 
 
 async def retrieve_memories(state: GraphState):
@@ -55,10 +78,11 @@ async def retrieve_docs(state: GraphState):
     return {"raw_documents": docs, "final_context": context, "retries": retries}
 
 
+@traceable(run_type="llm", name="Evaluate evidence")
 async def evaluate_evidence(state: GraphState):
     print("--- EVALUATING EVIDENCE ---")
     query = state["query"]
-    context = state["final_context"]
+    context = state.get("final_context", "")
 
     # If no docs returned, fail fast
     if not state.get("raw_documents"):
@@ -68,7 +92,7 @@ async def evaluate_evidence(state: GraphState):
     msg = [{"role": "user", "content": prompt}]
 
     try:
-        response = await llm_manager.generate_structured(messages=msg, schema=EvidenceEvaluation)
+        response = await fast_llm.generate_structured(messages=msg, schema=EvidenceEvaluation)
         evidence_sufficient = response.evidence_sufficient  # type: ignore
     except Exception as e:
         LLM_LOGGER.error(f"Error evaluating evidence: {e}")
@@ -77,7 +101,7 @@ async def evaluate_evidence(state: GraphState):
 
     return {"evidence_sufficient": evidence_sufficient}
 
-
+@traceable(run_type="llm", name="Rewrite query")
 async def rewrite_query(state: GraphState):
     print(f"--- REWRITING QUERY (Retry {state.get('retries', 0) + 1}/1) ---")
     query = state["query"]
@@ -88,7 +112,7 @@ async def rewrite_query(state: GraphState):
 
     try:
         chunks = []
-        async for chunk in llm_manager.generate_stream(messages=msg):
+        async for chunk in slow_llm.generate_stream(messages=msg):
             chunks.append(chunk)
         rewritten_query = "".join(chunks).strip()
     except Exception as e:
@@ -97,11 +121,11 @@ async def rewrite_query(state: GraphState):
 
     return {"query": rewritten_query, "retries": retries + 1}
 
-
+@traceable(run_type='llm', name="Answer generation")
 async def generate_answer(state: GraphState):
     print("--- GENERATING ANSWER ---")
     query = state.get("original_query") or state["query"]
-    context = state["final_context"]
+    context = state.get("final_context", "")
 
     messages = state.get("messages", [])
     if not messages:
@@ -111,7 +135,7 @@ async def generate_answer(state: GraphState):
 
     try:
         chunks = []
-        async for chunk in llm_manager.generate_stream(messages=messages): # type:ignore
+        async for chunk in fast_llm.generate_stream(messages=messages): # type:ignore
             chunks.append(chunk)
             if chunk.content and "stream_queue" in state and state["stream_queue"] is not None:
                 await state["stream_queue"].put(chunk.content)
@@ -160,10 +184,31 @@ async def store_memories(state: GraphState):
     return {}
 
 
+def route_decision(state: GraphState):
+    confidence = state.get("confidence")
+    route = state.get("route", "retrieve")
+    retries = state.get("retries", 0)
+    
+    if confidence < 0.75 and retries < 1:
+        return "rewrite"
+    
+    if route == "memory":
+        return "generate"
+    elif route == "retrieve":
+        return "retrieve"
+    elif route == "hybrid":
+        return "retrieve"
+    elif route == "tools":
+        return "generate"
+    else:
+        return "retrieve"
+
+
 def route_evaluation(state: GraphState):
     if state.get("evidence_sufficient", False) or state.get("retries", 0) >= 1:
         return "generate"
     return "rewrite"
+
 
 def route_tools(state: GraphState):
     messages = state.get("messages", [])
@@ -176,6 +221,7 @@ def route_tools(state: GraphState):
 
 workflow = StateGraph(GraphState)
 
+workflow.add_node("route_query", route_query)
 workflow.add_node("retrieve_memories", retrieve_memories)
 workflow.add_node("retrieve", retrieve_docs)
 workflow.add_node("evaluate", evaluate_evidence)
@@ -184,19 +230,25 @@ workflow.add_node("generate", generate_answer)
 workflow.add_node("tools", ToolNode(tools))
 workflow.add_node("store_memories", store_memories)
 
+
 workflow.add_edge(START, "retrieve_memories")
-workflow.add_edge("retrieve_memories", "retrieve")
-workflow.add_edge("retrieve", "evaluate")
-workflow.add_conditional_edges(
-    "evaluate", route_evaluation, {"generate": "generate", "rewrite": "rewrite"}
-)
-workflow.add_edge("rewrite", "retrieve")
+workflow.add_edge("retrieve_memories", "route_query")
 
 workflow.add_conditional_edges(
-    "generate",
-    route_tools,
-    {"tools": "tools", "end": "store_memories"}
+    "route_query", 
+    route_decision, 
+    {
+        "rewrite": "rewrite",
+        "retrieve": "retrieve",
+        "generate": "generate"
+    }
 )
+
+workflow.add_edge("retrieve", "evaluate")
+workflow.add_conditional_edges("evaluate", route_evaluation, {"generate": "generate", "rewrite": "rewrite"})
+workflow.add_edge("rewrite", "retrieve_memories")
+
+workflow.add_conditional_edges("generate",route_tools,{"tools": "tools", "end": "store_memories"})
 workflow.add_edge("tools", "generate")
 workflow.add_edge("store_memories", END)
 
