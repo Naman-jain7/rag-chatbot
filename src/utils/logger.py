@@ -15,7 +15,7 @@ def setup_logger(name: str, log_file: Path, level=logging.INFO) -> logging.Logge
 
     # Avoid duplicate handlers if script runs multiple times
     if not logger.handlers:
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
