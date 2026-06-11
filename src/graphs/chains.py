@@ -74,7 +74,10 @@ async def retrieve_docs(state: GraphState):
     )
     if not docs:
         return {"raw_documents": [], "final_context": "", "retries": retries}
-    context = "\n\n".join([f"Document:\n{d['content']}" for d in docs])
+    context = "\n\n".join([
+        f"Document [{d['metadata'].get('filename', 'unknown')} - Page {d['metadata'].get('page_number', 'unknown')}]:\n{d['content']}"
+        for d in docs
+    ])
     return {"raw_documents": docs, "final_context": context, "retries": retries}
 
 

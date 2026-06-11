@@ -28,7 +28,11 @@ async def chat_endpoint(request: ChatRequest):
             }
             async def run_graph():
                 try:
-                    await graph.ainvoke(initial_state) # type: ignore
+                    final_state = await graph.ainvoke(initial_state) # type: ignore
+                    from src.utils.citations import format_citations
+                    citations_text = format_citations(final_state)
+                    if citations_text:
+                        await queue.put(citations_text)
                 except Exception as e:
                     await queue.put(f"\n[Graph Error: {str(e)}]")
                 finally:

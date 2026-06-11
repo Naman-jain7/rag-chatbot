@@ -58,6 +58,9 @@ Return ONLY the rewritten query text and nothing else.
 GENERATE_ANSWER_PROMPT = """
 Use the following Context and Memory Context to answer the Question.
 If the context is empty or unhelpful, state that you do not have enough information.
+When using facts or information from the Context, you MUST cite your source by appending the filename and page number in brackets, e.g., [budget.pdf - Page 3], at the end of the relevant sentence.
+IMPORTANT: Dive straight into the answer. Do NOT start with phrases like "Based on the context provided..." or "According to the documents...". Do not use conversational filler.
+
 
 Memory Context (Past facts about the user):
 {memory_context}
