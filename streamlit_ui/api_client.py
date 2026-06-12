@@ -133,7 +133,7 @@ def delete_all_memories(user_id: int, token: str) -> None:
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
-def get_chat_history(user_id: int | str, token: str, chat_id: str) -> dict[str, Any]:
+def get_chat_history(token: str, user_id: int | str, chat_id: str) -> dict[str, Any]:
     """Fetch conversation historical messages from the backend checkpointer."""
 
     response = requests.get(

@@ -1,16 +1,7 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
 from app.db.manager import db_manager
 
 router = APIRouter()
-
-
-class MemoryItem(BaseModel):
-    id: str
-    memory_text: str
-    memory_type: str | None
-    created_at: str | None
-
 
 @router.get("/memories/{user_id}")
 async def list_memories(user_id: int):

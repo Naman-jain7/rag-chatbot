@@ -26,17 +26,17 @@ def _new_chat():
     st.session_state["token_usage"] = {}
     st.session_state["chat_id"] = str(uuid.uuid4())
 
-def _load_conversation(conv_id: str):
+def _load_conversation(chat_id: str):
     try:
         history = api_client.get_chat_history(
-            st.session_state['user_id'],
-            st.session_state['access_token'],
-            chat_id=conv_id
+            token=st.session_state["access_token"],
+            user_id=st.session_state["user_id"],
+            chat_id=chat_id,
         )
 
         st.session_state["chat_messages"] = history.get("messages", [])
         st.session_state["token_usage"] = history.get("token_usage", {})
-        st.session_state["chat_id"] = conv_id
+        st.session_state["chat_id"] = chat_id
     except Exception as e:
         st.error(f"Failed to load chat history: {e}")
 
@@ -82,7 +82,7 @@ usage = st.session_state["token_usage"]
 if usage:
     st.caption(
         f"Token usage — Prompt: {usage.get('input_tokens', 0)} | "
-        f"Completion: {usage.get('output_tokens', 0)} | "
+        f"Output: {usage.get('output_tokens', 0)} | "
         f"Total: {usage.get('total_tokens', 0)}"
     )
 
