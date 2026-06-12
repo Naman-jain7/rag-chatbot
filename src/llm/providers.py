@@ -157,6 +157,7 @@ class OllamaProvider(BaseLLMProvider):
     @traceable(run_type="llm", name="Ollama")
     async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
+        
         try:
             async for chunk in self.llm.astream(lc_messages, **kwargs):
                 yield chunk

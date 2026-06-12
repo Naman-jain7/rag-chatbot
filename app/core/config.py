@@ -80,6 +80,7 @@ class EmbeddingSettings(BaseSettings):
     HUGGINGFACEHUB_API_TOKEN: str = Field(..., validation_alias="HUGGINGFACEHUB_API_TOKEN")
     EMBEDDING_LLM: str = Field(..., validation_alias="EMBEDDING_LLM")
     EMBEDDING_LLM_DIMENSION: str = Field(..., validation_alias="EMBEDDING_LLM_DIMENSION")
+    RERANKER_MODEL: str = Field(..., validation_alias="RERANKER_MODEL")
 
 class MemorySettings(BaseSettings):
     MEM0_API_KEY: str = Field(..., validation_alias="MEM0_API_KEY")
@@ -110,6 +111,7 @@ class AppConfig(BaseSettings):
     APP_VERSION: str = Field(..., validation_alias="APP_VERSION")
     DB_PATH: str = Field(..., validation_alias="DB_PATH")
     SYS_PROMPTS_PATH: str = Field(..., validation_alias="SYS_PROMPTS_PATH")
+    LANGCHAIN_PROJECT: str = Field(..., validation_alias="LANGCHAIN_PROJECT")
 
 
 class Settings(BaseSettings):

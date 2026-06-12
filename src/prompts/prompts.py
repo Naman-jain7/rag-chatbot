@@ -12,23 +12,37 @@ Instructions:
 """
 
 
+MEMORY_PROMPT = """You are responsible for updating and maintaining accurate user memory.
+Query:
+{query}
+
+Existing memories:
+{memory_context}
+
+TASK:
+- Extract long-term user facts (identity, stable preferences, ongoing goals/projects).
+- Mark is_new=true only for information not already in current user details; otherwise false.
+- Store each memory as a short, atomic fact.
+- Use only explicit user statements; no assumptions.
+- If there is nothing memory-worthy, return an empty list.
+"""
+
+
 ROUTER_PROMPT = """
 You are an intelligent query router. Your task is to determine the best source of information needed to answer the user's query.
 
 Available routes:
 - memory: The Memory Context alone contains sufficient information to answer the query.
 - tools: Answering requires an external tool, API, calculation, web search, database lookup, or code execution.
-- retrieve: Use when neither memory nor tools are sufficient. This includes queries that require information from the knowledge base or when the correct route is uncertain.
+- retrieve: Use when information from uploaded documents, files, or the knowledge base is needed, or when the correct route is uncertain.
 
 Rules:
-- Use "memory" only if the Memory Context alone can answer the query.
-- Use "tools" only if an external tool or API is required.
-- Otherwise, use "retrieve".
+- ALWAYS use "retrieve" if the query explicitly or implicitly refers to any uploaded document, file, resume, report, PDF, notes, or knowledge base — even if the Memory Context appears to contain a partial answer. Memory only stores personal facts told by the user in conversation; it does NOT contain document contents.
+- Use "memory" ONLY for purely conversational personal facts (e.g. "what is my favourite colour?" when the user stated it in a previous message) AND only when the query contains NO reference whatsoever to any file or document.
+- Use "tools" only if an external tool, API, live data, calculation, or web search is required.
 - If unsure, use "retrieve".
 
-Return the route and your confidence score according to the schema provided.
-
-Memory Context:
+Memory Context (conversational facts only — does NOT contain document contents):
 {memory_context}
 
 Query: {query}

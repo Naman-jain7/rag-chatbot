@@ -1,9 +1,23 @@
 from pydantic import BaseModel, Field
+from typing import Optional, List
 from enum import Enum
 
 class EvidenceEvaluation(BaseModel):
     """Schema for evaluating if retrieved evidence is sufficient."""
     evidence_sufficient: bool = Field(..., description="True if the context contains enough information to comprehensively answer the query, False otherwise.")
+
+class ChatRequest(BaseModel):
+    user_id: int
+    query: str
+    chat_id: Optional[str] = None
+
+class MemoryItem(BaseModel):
+    text: str = Field(description="Atomic user memory as a short sentence")
+    is_new: bool = Field(description="True if new, false if duplicate")
+
+class MemoryDecision(BaseModel):
+    should_write: bool = Field(description="Whether to store any memories")
+    memories: List[MemoryItem] = Field(default_factory=list)
 
 
 

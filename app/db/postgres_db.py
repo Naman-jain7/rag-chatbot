@@ -75,6 +75,11 @@ class DatabaseManager:
         async with self.get_connection() as conn:
             return await conn.execute(query, *args)
 
+    async def execute_many(self, query: str, args_list: List[tuple]) -> None:
+        """Executes a batch INSERT, UPDATE, or DELETE query."""
+        async with self.get_connection() as conn:
+            await conn.executemany(query, args_list)
+
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Fetches a single user record by their unique email."""
         query = "SELECT id, full_name, age, email, hashed_password, preferences FROM users WHERE email = $1"

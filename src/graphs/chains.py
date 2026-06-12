@@ -1,44 +1,79 @@
-import tiktoken
+import asyncio
+from asyncio import Queue as AsyncQueue
+from contextvars import ContextVar
+from typing import Optional
+
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_huggingface import HuggingFaceEmbeddings
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langsmith import traceable
 
-from app.core.config import RAW_DB_PATH, settings
-from app.schemas.workflow import EvidenceEvaluation, QueryRouter
-from app.vector_db.chroma_db import ChromaManager
-from app.services.memory_service import memory_service
+from app.core.config import settings
+from app.schemas.workflow_schema import EvidenceEvaluation, QueryRouter, MemoryDecision
 from src.graphs.state import GraphState
 from src.graphs.tools import tools
 from src.llm.providers import fast_providers, slow_providers
 from src.llm.resilience import ResilientLLMManager
-from src.prompts.prompts import (
-    EVALUATE_EVIDENCE_PROMPT,
-    GENERATE_ANSWER_PROMPT,
-    REWRITE_QUERY_PROMPT,
-    ROUTER_PROMPT,
-)
-from src.utils.logger import LLM_LOGGER
+from src.memory.long_term_memory import long_term_memory as memory_service
+from src.memory.vector_db_manager import vector_db_manager
+from src.utils.token_usage import get_token_usage
+from src.prompts.prompts import EVALUATE_EVIDENCE_PROMPT,REWRITE_QUERY_PROMPT,ROUTER_PROMPT,MEMORY_PROMPT,GENERATE_ANSWER_PROMPT
+from src.utils.logger import LLM_LOGGER, MEMORY_LOGGER, APP_LOGGER
+
+# ContextVar that carries the streaming queue into generate_answer without
+# touching the checkpointed GraphState (asyncio.Queue is not serialisable).
+_stream_queue_var: ContextVar[Optional[AsyncQueue]] = ContextVar("stream_queue", default=None)
+
+# Module-level embeddings singleton shared with ingest pipeline
+_query_embeddings: HuggingFaceEmbeddings | None = None
+
+def _get_query_embeddings() -> HuggingFaceEmbeddings:
+    global _query_embeddings
+    if _query_embeddings is None:
+        LLM_LOGGER.info("Loading HuggingFaceEmbeddings for query encoding...")
+        _query_embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_LLM)
+    return _query_embeddings
 
 load_dotenv()
 
+# ==========================================================================================
 
 fast_llm = ResilientLLMManager(providers=fast_providers)  # type: ignore
 slow_llm = ResilientLLMManager(providers=slow_providers)  # type: ignore
 
+# ==========================================================================================
 
+async def retrieve_memories(state: GraphState):
+    print("--- RETRIEVING MEMORIES ---")
+    user_id = state.get("user_id")
+    query = state.get("original_query") or state.get("query")
+    memories = await memory_service.get_relevant(user_id, query) if user_id else ""
+    return {"memories": memories}
+
+# ==========================================================================================
+
+_DOCUMENT_KEYWORDS = {
+    "document", "documents", "file", "files", "resume", "cv",
+    "report", "pdf", "uploaded", "upload", "attachment", "notes",
+    "according to", "based on", "in my", "from my", "from the",
+    "what does", "what did", "what is in", "summarise", "summarize",
+    "paper", "thesis", "contract", "invoice", "letter",
+}
+
+@traceable(run_type="llm", name="Route query")
 async def route_query(state: GraphState):
     print("--- ROUTING QUERY ---")
     query = state["query"]
     memory_context = state.get("memories", "")
     prompt = ROUTER_PROMPT.format(query=query, memory_context=memory_context)
     msg = [{"role": "user", "content": prompt}]
-    
+
     try:
         response = await fast_llm.generate_structured(messages=msg, schema=QueryRouter)
-        route = response.route.value # type: ignore
-        confidence = response.confidence_score # type: ignore
+        route = response.route.value  # type: ignore
+        confidence = response.confidence_score  # type: ignore
     except Exception as e:
         LLM_LOGGER.error(f"Error routing query: {e}")
         route = "retrieve"
@@ -47,39 +82,127 @@ async def route_query(state: GraphState):
     print(f"--- ROUTE: {route} | CONFIDENCE: {confidence} ---")
     return {"route": route, "confidence": confidence}
 
-
-async def retrieve_memories(state: GraphState):
-    print("--- RETRIEVING MEMORIES ---")
-    user_id = state.get("user_id")
-    query = state.get("original_query") or state.get("query")
-    memories = memory_service.get_relevant(user_id, query) if user_id else ""
-    return {"memories": memories}
-
-
-async def retrieve_docs(state: GraphState):
-    print("--- RETRIEVING DOCS FROM CHROMA ---")
-    query = state["query"]
+def route_decision(state: GraphState):
+    query_lower = (state.get("original_query") or state.get("query", "")).lower()
+    route = state.get("route", "retrieve")
+    confidence = state.get("confidence", 1.0)
     retries = state.get("retries", 0)
 
-    chroma_manager = ChromaManager(
-        collection_name=state.get("namespace", "default"),
-        persist_dir=str(RAW_DB_PATH),
-        model_name=settings.embedding.EMBEDDING_LLM,
-    )
-    docs = chroma_manager.retrieve_and_rerank(
-        query=query, 
-        initial_k=15, 
-        final_top_k=3, 
-        collection_name=state.get("namespace", "default")
-    )
-    if not docs:
+    # Hard override: any query referencing document content must go to retrieve.
+    # This prevents memory from being used when the user explicitly asks about
+    # an uploaded file, even if the LLM router picked "memory".
+    if any(kw in query_lower for kw in _DOCUMENT_KEYWORDS):
+        print("--- ROUTE OVERRIDE → retrieve (document keyword detected) ---")
+        return "retrieve"
+
+    if confidence < 0.75 and retries < 1:
+        return "rewrite"
+
+    if route == "memory":
+        return "generate"
+    elif route == "retrieve":
+        return "retrieve"
+    elif route == "hybrid":
+        return "retrieve"
+    elif route == "tools":
+        return "generate"
+    else:
+        return "retrieve"
+
+def route_evaluation(state: GraphState):
+    if state.get("evidence_sufficient", False) or state.get("retries", 0) >= 1:
+        return "generate"
+    return "rewrite"
+
+def route_tools(state: GraphState):
+    messages = state.get("messages", [])
+    if messages:
+        last_message = messages[-1]
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            return "tools"
+    return "end"
+
+# ==========================================================================================
+
+async def store_memories(state: GraphState):
+    print("--- STORING MEMORIES ---")
+    user_id = state.get("user_id")
+    query = state.get("original_query") or state.get("query")
+    response = state.get("response")
+    if not user_id or not response:
+        return {}
+    
+    try:
+        existing_raw_memories = await memory_service.get_all_raw_texts(user_id)
+        if existing_raw_memories:
+            user_details = "\n".join([f"- {text}" for text in existing_raw_memories])
+        else:
+            user_details = "No existing memories"
+        
+        prompt = MEMORY_PROMPT.format(query=query, memory_context=user_details)
+        user_msg = f"User Query: {query}\nAssistant Response: {response}"
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user","content": f"Please review this interaction and extract any new memories:\n{user_msg}"},
+        ]
+
+        decision = await fast_llm.generate_structured(messages=messages, schema=MemoryDecision)
+
+        if decision and decision.should_write:
+            new_memories = [m.text for m in decision.memories if m.is_new]
+            if new_memories:
+                await memory_service.store_batch(user_id, new_memories)
+    except Exception as e:
+        MEMORY_LOGGER.error(f"Error in store_memories node workflow: {e}")
+    
+    return {}
+
+# ==========================================================================================
+
+async def retrieve_docs(state: GraphState):
+    print("--- RETRIEVING DOCS FROM POSTGRES ---")
+    query = state["query"]
+    user_id = state.get("user_id")
+    retries = state.get("retries", 0)
+
+    if not user_id:
         return {"raw_documents": [], "final_context": "", "retries": retries}
+
+    # Generate query embedding off the main thread
+    embeddings_model = await asyncio.to_thread(_get_query_embeddings)
+    query_embedding = await asyncio.to_thread(embeddings_model.embed_query, query)
+
+    # Hybrid retrieval: pgvector + BM25 + CrossEncoder rerank
+    raw_docs = await vector_db_manager.retrieve_and_rerank(
+        user_id=user_id,
+        query_text=query,
+        query_embedding=query_embedding,
+        top_k=5,
+    )
+
+    if not raw_docs:
+        return {"raw_documents": [], "final_context": "", "retries": retries}
+
+    # Normalise to the dict shape the rest of the graph expects
+    docs = [
+        {
+            "content": d["chunk_text"],
+            "metadata": {
+                "filename": d.get("filename", "unknown"),
+                "page_number": d.get("page_number", "unknown"),
+                "section_id": d.get("section_id", ""),
+            },
+        }
+        for d in raw_docs
+    ]
+
     context = "\n\n".join([
-        f"Document [{d['metadata'].get('filename', 'unknown')} - Page {d['metadata'].get('page_number', 'unknown')}]:\n{d['content']}"
+        f"Document [{d['metadata']['filename']} - Page {d['metadata']['page_number']}]:\n{d['content']}"
         for d in docs
     ])
     return {"raw_documents": docs, "final_context": context, "retries": retries}
 
+# ==========================================================================================
 
 @traceable(run_type="llm", name="Evaluate evidence")
 async def evaluate_evidence(state: GraphState):
@@ -124,103 +247,60 @@ async def rewrite_query(state: GraphState):
 
     return {"query": rewritten_query, "retries": retries + 1}
 
+# ==========================================================================================
+
 @traceable(run_type='llm', name="Answer generation")
 async def generate_answer(state: GraphState):
     print("--- GENERATING ANSWER ---")
-    query = state.get("original_query") or state["query"]
+    query = state.get("original_query") or state.get("query")
     context = state.get("final_context", "")
+    memory_context = state.get("memories", "")
+    chat_id = state.get("chat_id", "")
 
-    messages = state.get("messages", [])
-    if not messages:
-        memory_context = state.get("memories", "")
-        prompt = GENERATE_ANSWER_PROMPT.format(query=query, context=context, memory_context=memory_context)
-        messages = [HumanMessage(content=prompt)]
+    formatted_system_prompt = GENERATE_ANSWER_PROMPT.format(context=context, memory_context=memory_context)
+    system_message = SystemMessage(content=formatted_system_prompt)
+    
+    messages_list = state.get("messages", [])
+    if not messages_list:
+        messages_list = [HumanMessage(content=query)]
 
+    llm_messages = [system_message] + messages_list
+
+    stream_queue = _stream_queue_var.get()
     try:
         chunks = []
-        async for chunk in fast_llm.generate_stream(messages=messages): # type:ignore
+        async for chunk in fast_llm.generate_stream(messages=llm_messages):  # type: ignore
             chunks.append(chunk)
-            if chunk.content and "stream_queue" in state and state["stream_queue"] is not None:
-                await state["stream_queue"].put(chunk.content)
-        
+            if chunk.content and stream_queue is not None:
+                await stream_queue.put(chunk.content)
+
         if chunks:
             final_message = chunks[0]
             for chunk in chunks[1:]:
                 final_message += chunk
         else:
             final_message = AIMessage(content="")
-            
+
         content = final_message.content
     except Exception as e:
         content = f"Error during generation: {str(e)}"
         final_message = AIMessage(content=content)
-        if "stream_queue" in state and state["stream_queue"] is not None:
-            await state["stream_queue"].put(content)
-
+        if stream_queue is not None:
+            await stream_queue.put(content)
+    
     try:
-        enc = tiktoken.get_encoding("cl100k_base")
-        prompt_tokens = len(enc.encode(str(messages[-1].content))) if hasattr(messages[-1], "content") else 0
-        response_tokens = len(enc.encode(content)) if content else 0 # type:ignore
-    except Exception:
-        prompt_tokens = 0
-        response_tokens = 0
-
-    usage = {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": response_tokens,
-        "total_tokens": prompt_tokens + response_tokens,
-    }
-
-    if len(state.get("messages", [])) == 0:
-        return {"messages": [messages[0], final_message], "response": content, "usage": usage}
-    else:
-        return {"messages": [final_message], "response": content, "usage": usage}
-
-
-async def store_memories(state: GraphState):
-    print("--- STORING MEMORIES ---")
-    user_id = state.get("user_id")
-    query = state.get("original_query") or state.get("query")
-    response = state.get("response")
-    if user_id and response:
-        memory_service.store(user_id, query, response)
-    return {}
-
-
-def route_decision(state: GraphState):
-    confidence = state.get("confidence")
-    route = state.get("route", "retrieve")
-    retries = state.get("retries", 0)
+        usage = get_token_usage(session_id=chat_id)
+    except Exception as e:
+        APP_LOGGER.error(f"Failed fetching external token metrics: {e}")
+        usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
     
-    if confidence < 0.75 and retries < 1:
-        return "rewrite"
-    
-    if route == "memory":
-        return "generate"
-    elif route == "retrieve":
-        return "retrieve"
-    elif route == "hybrid":
-        return "retrieve"
-    elif route == "tools":
-        return "generate"
-    else:
-        return "retrieve"
+    return {"messages": [final_message], "response": content, "token_usage": usage}
 
-
-def route_evaluation(state: GraphState):
-    if state.get("evidence_sufficient", False) or state.get("retries", 0) >= 1:
-        return "generate"
-    return "rewrite"
-
-
-def route_tools(state: GraphState):
-    messages = state.get("messages", [])
-    if messages:
-        last_message = messages[-1]
-        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-            return "tools"
-    return "end"
-
+# ==========================================================================================
 
 workflow = StateGraph(GraphState)
 
@@ -255,4 +335,4 @@ workflow.add_conditional_edges("generate",route_tools,{"tools": "tools", "end": 
 workflow.add_edge("tools", "generate")
 workflow.add_edge("store_memories", END)
 
-graph = workflow.compile()
+graph = workflow.compile()  # compiled without checkpointer as a safe default
