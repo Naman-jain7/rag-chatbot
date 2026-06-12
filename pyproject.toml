@@ -1,7 +1,7 @@
 [project]
 name = "rag_chatbot"
 version = "1.0.0"
-description = "A GenAI project with FastAPI"
+description = "A Streamlit RAG chatbot backed by FastAPI"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 
@@ -21,15 +21,18 @@ dependencies = [
     "langchain-community>=0.4.2",
     "langchain-huggingface>=1.2.2",
     "tiktoken>=0.13.0",
-    "langchain-chroma>=1.1.0",
     "pybreaker>=1.4.1",
     "langchain-openai>=1.2.2",
     "pyjwt>=2.13.0",
     "python-multipart>=0.0.32",
     "pydantic[email]>=2.13.4",
     "sentence-transformers>=5.5.1",
-    "mem0ai>=2.0.4",
     "openai>=2.41.0",
+    "requests>=2.32.0",
+    "streamlit>=1.42.0",
+    "pgvector<0.4",
+    "langgraph-checkpoint-postgres>=3.1.0",
+    "psycopg-binary>=3.3.4",
 ]
 
 [project.optional-dependencies]

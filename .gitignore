@@ -12,6 +12,7 @@
 # Standard Python
 .env
 .venv/
+.streamlit/
 __pycache__/
 *.pyc
 .DS_Store
