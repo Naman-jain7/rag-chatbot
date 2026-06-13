@@ -20,7 +20,7 @@ from src.memory.long_term_memory import long_term_memory as memory_service
 from src.memory.vector_db_manager import vector_db_manager
 from src.utils.token_usage import get_token_usage
 from src.prompts.prompts import EVALUATE_EVIDENCE_PROMPT,REWRITE_QUERY_PROMPT,ROUTER_PROMPT,MEMORY_PROMPT,GENERATE_ANSWER_PROMPT
-from src.utils.logger import LLM_LOGGER, MEMORY_LOGGER, APP_LOGGER
+from src.utils.logger import LLM_LOGGER, MEMORY_LOGGER, APP_LOGGER, EMBEDDING_LOGGER
 
 # ContextVar that carries the streaming queue into generate_answer without
 # touching the checkpointed GraphState (asyncio.Queue is not serialisable).
@@ -94,7 +94,7 @@ def route_decision(state: GraphState):
         print("--- ROUTE OVERRIDE → retrieve (document keyword detected) ---")
         return "retrieve"
 
-    if confidence < 0.75 and retries < 1:
+    if confidence < 0.5 and retries < 1:
         return "rewrite"
 
     if route == "memory":
@@ -183,6 +183,7 @@ async def retrieve_docs(state: GraphState):
         )
 
     if not raw_docs:
+        EMBEDDING_LOGGER.info('The LLM received no documents')
         return {"raw_documents": [], "final_context": "", "retries": retries}
 
     # Normalise to the dict shape the rest of the graph expects
@@ -258,6 +259,7 @@ async def generate_answer(state: GraphState):
     context = state.get("final_context", "")
     memory_context = state.get("memories", "")
     chat_id = state.get("chat_id", "")
+    user_id = state.get("user_id", "")
 
     formatted_system_prompt = GENERATE_ANSWER_PROMPT.format(query=query, context=context, memory_context=memory_context)
 
@@ -292,7 +294,7 @@ async def generate_answer(state: GraphState):
             await stream_queue.put(content)
     
     try:
-        usage = get_token_usage(session_id=chat_id)
+        usage = get_token_usage(user_id = user_id, session_id=chat_id)
     except Exception as e:
         APP_LOGGER.error(f"Failed fetching external token metrics: {e}")
         usage = {

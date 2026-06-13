@@ -7,12 +7,7 @@ import uuid
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_text_splitters import (
-    HTMLHeaderTextSplitter,
-    Language,
-    MarkdownHeaderTextSplitter,
-    RecursiveCharacterTextSplitter,
-)
+from langchain_text_splitters import HTMLHeaderTextSplitter, Language, MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 from app.core.config import settings
 from app.db.manager import db_manager

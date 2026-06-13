@@ -30,7 +30,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest):
         payload.query[:80],
     )
     config = {
-        "configurable":{"thread_id": chat_id,"user_id": payload.user_id}
+        "configurable":{"thread_id": chat_id, "user_id": payload.user_id}
     }
     queue: asyncio.Queue = asyncio.Queue()
 

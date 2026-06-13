@@ -1,15 +1,18 @@
 from langsmith import Client
 from app.core.config import settings
 
-def get_token_usage(session_id: str)->dict:
+def get_token_usage(user_id: int | str, session_id: str)->dict:
     client = Client()
-    runs = client.list_runs(
-        project_name=settings.app_config.LANGCHAIN_PROJECT,
-        limit=1,
-        filter=f'and(eq(metadata_key, "session_id"), eq(metadata_value, "{session_id}"))',
+    
+    latest_run = next(
+        client.list_runs(
+            project_name=settings.app_config.LANGCHAIN_PROJECT,
+            is_root=True,
+            limit=1,
+            filter=f'and(eq(metadata_key, "thread_id"), eq(metadata_value, "{session_id}"))',
+        ),
+        None,
     )
-
-    latest_run = next(runs, None)
 
     if latest_run is None:
         return {
@@ -17,11 +20,22 @@ def get_token_usage(session_id: str)->dict:
             "output_tokens": 0,
             "total_tokens": 0,
         }
+    
+    input_tokens = 0
+    output_tokens = 0
+    total_tokens = 0
 
-    run = client.read_run(latest_run.id)
+
+    for run in client.list_runs(trace_id=latest_run.trace_id):
+        if run.run_type != "llm":
+            continue
+        
+        input_tokens += run.input_tokens or 0
+        output_tokens += run.output_tokens or 0
+        total_tokens += run.total_tokens or 0
 
     return {
-        "input_tokens": run.input_tokens,
-        "output_tokens": run.output_tokens,
-        "total_tokens": run.total_tokens
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens
     }

@@ -35,6 +35,7 @@ class VectorDBManager:
         - version_id (Optional[str])
         """
         if not chunks_data:
+            EMBEDDING_LOGGER.error('No chunks generated to store')
             return
 
         query = """
@@ -66,8 +67,14 @@ class VectorDBManager:
             )
             args_list.append(args)
 
-        await db_manager.execute_many(query, args_list)
-        EMBEDDING_LOGGER.info(f"Successfully stored {len(chunks_data)} chunks for user {user_id}, doc {doc_id}.")
+        EMBEDDING_LOGGER.info(f"store_chunks called with {len(chunks_data) if chunks_data else 0} chunks.")
+        
+        try:
+            await db_manager.execute_many(query, args_list)
+            EMBEDDING_LOGGER.info("Execute_many completed successfully.")
+        except Exception as e:
+            EMBEDDING_LOGGER.error(f"DATABASE INSERT FAILED: {str(e)}", exc_info=True)
+            raise e
 
     async def delete_user_documents(self, user_id: int, doc_id: str) -> None:
         """Deletes all document chunks matching user_id and doc_id."""
@@ -110,6 +117,9 @@ class VectorDBManager:
         """Load every chunk for explicitly named documents in source order."""
         if not filenames:
             return []
+        
+        filenames_lower = [f.lower() for f in filenames]
+
         return await db_manager.fetch_rows(
             """
             SELECT id, chunk_text, section_id, filename, page_number,
