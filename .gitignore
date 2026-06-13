@@ -16,14 +16,9 @@
 __pycache__/
 *.pyc
 .DS_Store
+*.egg-info/
 
-# Logs - Track the folder, ignore the contents
-/logs/*
-!/logs/.gitkeep
-# If you want to keep specific log placeholders:
-!/logs/api.log
-!/logs/training.log
-src/rag_chatbot.egg-info
+logs/
 
 personal/
 data/

@@ -111,6 +111,7 @@ class AppConfig(BaseSettings):
     APP_VERSION: str = Field(..., validation_alias="APP_VERSION")
     DB_PATH: str = Field(..., validation_alias="DB_PATH")
     SYS_PROMPTS_PATH: str = Field(..., validation_alias="SYS_PROMPTS_PATH")
+    SECRET_KEY: str = Field(..., validation_alias='SECRET_KEY')
     LANGCHAIN_PROJECT: str = Field(..., validation_alias="LANGCHAIN_PROJECT")
 
 

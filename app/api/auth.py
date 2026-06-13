@@ -7,6 +7,7 @@ import jwt
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
+from app.core.config import settings
 from app.db.manager import db_manager
 from app.schemas.user_profile import TokenResponse, UserSignup
 from src.utils.exception import AppException, ConflictError, UnauthenticatedError
@@ -14,7 +15,7 @@ from src.utils.logger import APP_LOGGER
 
 router = APIRouter()
 
-SECRET_KEY = "dummy_secret_key_change_in_production"
+SECRET_KEY = settings.app_config.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
