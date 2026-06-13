@@ -90,7 +90,7 @@ def stream_chat(user_id: int, token: str, query: str, chat_id: str | None = None
     if chat_id:
         payload["chat_id"] = chat_id
     with requests.post(
-        f"{API_BASE_URL}/chat/chat",
+        f"{API_BASE_URL}/chat/stream",
         headers={**_auth_headers(token), "Content-Type": "application/json"},
         json=payload,
         stream=True,
@@ -144,3 +144,13 @@ def get_chat_history(token: str, user_id: int | str, chat_id: str) -> dict[str, 
 
     _raise_for_status(response)
     return response.json()
+
+
+def list_conversations(token: str, user_id: int | str) -> list[dict[str, Any]]:
+    response = requests.get(
+        f"{API_BASE_URL}/chat/conversations/{user_id}",
+        headers=_auth_headers(token),
+        timeout=TIMEOUT_SECONDS,
+    )
+    _raise_for_status(response)
+    return response.json()["conversations"]

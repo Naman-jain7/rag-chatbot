@@ -18,7 +18,7 @@ def is_authenticated() -> bool:
 
 def sign_in(access_token: str, user_id: int) -> None:
     st.session_state.access_token = access_token
-    st.session_state.user_id = user_id
+    st.session_state["user_id"] = user_id
     st.session_state.chat_messages = []
 
 
