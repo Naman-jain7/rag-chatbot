@@ -3,7 +3,6 @@ import hashlib
 import os
 import tempfile
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
@@ -22,7 +21,6 @@ from src.utils.logger import APP_LOGGER
 
 router = APIRouter()
 
-# Module-level embeddings singleton — loaded once on first upload
 _embeddings: HuggingFaceEmbeddings | None = None
 
 
@@ -56,7 +54,6 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="Unsupported file format")
 
     doc_id = str(uuid.uuid4())
-    timestamp = datetime.utcnow().isoformat()
 
     # Save uploaded file to a temp path so loaders can read it
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:

@@ -1,4 +1,6 @@
 import uuid
+import os
+import re
 from typing import List, Dict, Any
 from sentence_transformers import CrossEncoder
 
@@ -72,6 +74,54 @@ class VectorDBManager:
         query = "DELETE FROM document_chunks WHERE user_id = $1 AND doc_id = $2"
         await db_manager.execute_command(query, user_id, doc_id)
         EMBEDDING_LOGGER.info(f"Deleted document chunks for user {user_id}, doc {doc_id}.")
+
+    @staticmethod
+    def _normalise_filename(value: str) -> str:
+        stem = os.path.splitext(value)[0]
+        return re.sub(r"[^a-z0-9]+", " ", stem.lower()).strip()
+
+    @classmethod
+    def _filename_aliases(cls, filename: str) -> set[str]:
+        stem = os.path.splitext(filename)[0]
+        without_parenthetical = re.sub(r"\s*\([^)]*\)\s*", " ", stem)
+        return {
+            alias
+            for alias in {
+                cls._normalise_filename(stem),
+                cls._normalise_filename(without_parenthetical),
+            }
+            if alias
+        }
+
+    async def find_matching_filenames(self, user_id: int, query_text: str) -> List[str]:
+        """Return filenames explicitly referenced by the query."""
+        rows = await db_manager.fetch_rows(
+            "SELECT filename FROM user_documents WHERE user_id = $1 ORDER BY created_at DESC",
+            user_id,
+        )
+        normalised_query = re.sub(r"[^a-z0-9]+", " ", query_text.lower()).strip()
+        return [
+            row["filename"]
+            for row in rows
+            if any(alias in normalised_query for alias in self._filename_aliases(row["filename"]))
+        ]
+
+    async def get_document_chunks(self, user_id: int, filenames: List[str]) -> List[Dict[str, Any]]:
+        """Load every chunk for explicitly named documents in source order."""
+        if not filenames:
+            return []
+        return await db_manager.fetch_rows(
+            """
+            SELECT id, chunk_text, section_id, filename, page_number,
+                   1.0::float AS vector_score, 0.0::float AS fts_score,
+                   1.0::float AS rerank_score, 'filename' AS retrieval_method
+            FROM document_chunks
+            WHERE user_id = $1 AND filename = ANY($2::text[])
+            ORDER BY filename, page_number NULLS FIRST, id
+            """,
+            user_id,
+            filenames,
+        )
 
     async def retrieve_and_rerank(self, user_id: int, query_text: str, query_embedding: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
         """

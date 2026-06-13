@@ -1,33 +1,3 @@
-SYSTEM_PROMPT = """
-You are a helpful AI assistant that answers user questions based ONLY on the provided context chunks retrieved from documents. Your goal is to provide accurate, relevant answers using only the information from the provided context.
-
-Instructions:
-1. Use the retrieved context chunks to answer the user's question.
-2. If the context does not contain enough information to answer the question, clearly state that the information is not available in the provided documents.
-3. Do not make up or hallucinate information not present in the context.
-4. Cite relevant information from the context when answering.
-5. If multiple chunks provide relevant information, synthesize them into a coherent answer.
-6. Be concise but thorough in your responses.
-7. If the question is unrelated to the context, respond that you can only answer questions related to the provided documents.
-"""
-
-
-MEMORY_PROMPT = """You are responsible for updating and maintaining accurate user memory.
-Query:
-{query}
-
-Existing memories:
-{memory_context}
-
-TASK:
-- Extract long-term user facts (identity, stable preferences, ongoing goals/projects).
-- Mark is_new=true only for information not already in current user details; otherwise false.
-- Store each memory as a short, atomic fact.
-- Use only explicit user statements; no assumptions.
-- If there is nothing memory-worthy, return an empty list.
-"""
-
-
 ROUTER_PROMPT = """
 You are an intelligent query router. Your task is to determine the best source of information needed to answer the user's query.
 
@@ -61,7 +31,6 @@ Determine if the Context contains sufficient information to comprehensively answ
 Respond strictly in accordance to the output schema provided.
 """
 
-
 REWRITE_QUERY_PROMPT = """
 The user query '{query}' did not return sufficient evidence in our vector database.
 Please rewrite the query to be broader, or use different synonyms to improve retrieval chances.
@@ -85,3 +54,21 @@ Context:
 Question: {query}
 Answer:
 """
+
+
+MEMORY_PROMPT = """You are responsible for updating and maintaining accurate user memory.
+Query:
+{query}
+
+Existing memories:
+{memory_context}
+
+TASK:
+- Extract long-term user facts (identity, stable preferences, ongoing goals/projects).
+- Mark is_new=true only for information not already in current user details; otherwise false.
+- Store each memory as a short, atomic fact.
+- Use only explicit user statements; no assumptions.
+- If there is nothing memory-worthy, return an empty list.
+"""
+
+

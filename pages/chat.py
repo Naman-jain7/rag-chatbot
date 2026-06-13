@@ -13,7 +13,13 @@ META_PREFIX = "\n__META__"
 
 # ── Initialise session state ──────────────────────────────────────────────────
 if "conversations" not in st.session_state:
-    st.session_state["conversations"] = []
+    try:
+        st.session_state["conversations"] = api_client.list_conversations(
+            token=st.session_state["access_token"],
+            user_id=st.session_state["user_id"],
+        )
+    except Exception:
+        st.session_state["conversations"] = []
 if "chat_id" not in st.session_state:
     st.session_state["chat_id"] = str(uuid.uuid4())
 if "chat_messages" not in st.session_state:
@@ -54,7 +60,7 @@ with st.sidebar:
     if not conv_list:
         st.caption("No conversations yet.")
 
-    for conv in reversed(conv_list):
+    for conv in conv_list:
         label = conv["title"]
         if st.button(label, key=f"conv-{conv['id']}", use_container_width=True):
             _load_conversation(conv["id"])
@@ -71,7 +77,7 @@ with action:
         _new_chat()
         st.rerun()
 
-st.caption(f"Chat ID: {st.session_state.chat_id}")
+st.caption(f"Chat ID: {st.session_state['chat_id']}")
 
 for message in st.session_state["chat_messages"]:
     with st.chat_message(message["role"]):
@@ -99,10 +105,10 @@ if prompt := st.chat_input("Ask a question about your documents..."):
         try:
             # Stream directly from FastAPI backend which holds the Postgres checkpointer
             for chunk in api_client.stream_chat(
-                st.session_state.user_id,
-                st.session_state.access_token,
+                st.session_state["user_id"],
+                st.session_state["access_token"],
                 prompt,
-                chat_id=st.session_state['chat_id'],
+                chat_id=st.session_state["chat_id"],
             ):
                 if chunk.startswith(META_PREFIX):
                     import json
@@ -119,7 +125,7 @@ if prompt := st.chat_input("Ask a question about your documents..."):
             # (Optional) Track metadata sidebar updates dynamically
             # If it's a brand new chat, add it to sidebar track list
             if not any(c["id"] == st.session_state['chat_id'] for c in st.session_state['conversations']):
-                st.session_state['conversations'].append({
+                st.session_state['conversations'].insert(0, {
                     "id": st.session_state.chat_id,
                     "title": prompt[:30] + "..."
                 })

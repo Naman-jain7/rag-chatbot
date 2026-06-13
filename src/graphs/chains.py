@@ -26,7 +26,6 @@ from src.utils.logger import LLM_LOGGER, MEMORY_LOGGER, APP_LOGGER
 # touching the checkpointed GraphState (asyncio.Queue is not serialisable).
 _stream_queue_var: ContextVar[Optional[AsyncQueue]] = ContextVar("stream_queue", default=None)
 
-# Module-level embeddings singleton shared with ingest pipeline
 _query_embeddings: HuggingFaceEmbeddings | None = None
 
 def _get_query_embeddings() -> HuggingFaceEmbeddings:
@@ -48,7 +47,7 @@ slow_llm = ResilientLLMManager(providers=slow_providers)  # type: ignore
 async def retrieve_memories(state: GraphState):
     print("--- RETRIEVING MEMORIES ---")
     user_id = state.get("user_id")
-    query = state.get("original_query") or state.get("query")
+    query = state.get("query") or state.get("original_query")
     memories = await memory_service.get_relevant(user_id, query) if user_id else ""
     return {"memories": memories}
 
@@ -65,7 +64,7 @@ _DOCUMENT_KEYWORDS = {
 @traceable(run_type="llm", name="Route query")
 async def route_query(state: GraphState):
     print("--- ROUTING QUERY ---")
-    query = state["query"]
+    query = state.get("query")
     memory_context = state.get("memories", "")
     prompt = ROUTER_PROMPT.format(query=query, memory_context=memory_context)
     msg = [{"role": "user", "content": prompt}]
@@ -85,7 +84,7 @@ async def route_query(state: GraphState):
 def route_decision(state: GraphState):
     query_lower = (state.get("original_query") or state.get("query", "")).lower()
     route = state.get("route", "retrieve")
-    confidence = state.get("confidence", 1.0)
+    confidence = state.get("confidence", 0.5)
     retries = state.get("retries", 0)
 
     # Hard override: any query referencing document content must go to retrieve.
@@ -127,7 +126,7 @@ def route_tools(state: GraphState):
 async def store_memories(state: GraphState):
     print("--- STORING MEMORIES ---")
     user_id = state.get("user_id")
-    query = state.get("original_query") or state.get("query")
+    query = state.get("original_query")
     response = state.get("response")
     if not user_id or not response:
         return {}
@@ -161,24 +160,27 @@ async def store_memories(state: GraphState):
 
 async def retrieve_docs(state: GraphState):
     print("--- RETRIEVING DOCS FROM POSTGRES ---")
-    query = state["query"]
     user_id = state.get("user_id")
+    query = state.get("query") or state.get("original_query")
     retries = state.get("retries", 0)
 
     if not user_id:
         return {"raw_documents": [], "final_context": "", "retries": retries}
 
-    # Generate query embedding off the main thread
-    embeddings_model = await asyncio.to_thread(_get_query_embeddings)
-    query_embedding = await asyncio.to_thread(embeddings_model.embed_query, query)
-
-    # Hybrid retrieval: pgvector + BM25 + CrossEncoder rerank
-    raw_docs = await vector_db_manager.retrieve_and_rerank(
-        user_id=user_id,
-        query_text=query,
-        query_embedding=query_embedding,
-        top_k=5,
-    )
+    matched_filenames = await vector_db_manager.find_matching_filenames(user_id, query)
+    if matched_filenames:
+        # Whole-document requests such as "summarise resume 1" need all chunks
+        # in source order, not only the five chunks preferred by a reranker.
+        raw_docs = await vector_db_manager.get_document_chunks(user_id, matched_filenames)
+    else:
+        embeddings_model = await asyncio.to_thread(_get_query_embeddings)
+        query_embedding = await asyncio.to_thread(embeddings_model.embed_query, query)
+        raw_docs = await vector_db_manager.retrieve_and_rerank(
+            user_id=user_id,
+            query_text=query,
+            query_embedding=query_embedding,
+            top_k=5,
+        )
 
     if not raw_docs:
         return {"raw_documents": [], "final_context": "", "retries": retries}
@@ -230,7 +232,7 @@ async def evaluate_evidence(state: GraphState):
 @traceable(run_type="llm", name="Rewrite query")
 async def rewrite_query(state: GraphState):
     print(f"--- REWRITING QUERY (Retry {state.get('retries', 0) + 1}/1) ---")
-    query = state["query"]
+    query = state.get("query") or state.get("original_query")
     retries = state.get("retries", 0)
 
     prompt = REWRITE_QUERY_PROMPT.format(query=query)
@@ -239,7 +241,7 @@ async def rewrite_query(state: GraphState):
     try:
         chunks = []
         async for chunk in slow_llm.generate_stream(messages=msg):
-            chunks.append(chunk)
+            chunks.append(chunk.content if hasattr(chunk, "content") else str(chunk))
         rewritten_query = "".join(chunks).strip()
     except Exception as e:
         LLM_LOGGER.error(f"Error rewriting query: {e}")
@@ -252,12 +254,13 @@ async def rewrite_query(state: GraphState):
 @traceable(run_type='llm', name="Answer generation")
 async def generate_answer(state: GraphState):
     print("--- GENERATING ANSWER ---")
-    query = state.get("original_query") or state.get("query")
+    query = state.get("query") or state.get("original_query")
     context = state.get("final_context", "")
     memory_context = state.get("memories", "")
     chat_id = state.get("chat_id", "")
 
-    formatted_system_prompt = GENERATE_ANSWER_PROMPT.format(context=context, memory_context=memory_context)
+    formatted_system_prompt = GENERATE_ANSWER_PROMPT.format(query=query, context=context, memory_context=memory_context)
+
     system_message = SystemMessage(content=formatted_system_prompt)
     
     messages_list = state.get("messages", [])

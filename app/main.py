@@ -39,6 +39,16 @@ async def lifespan(app: FastAPI):
             );
         """)
         await db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS chat_conversations (
+                user_id INT REFERENCES users(id) ON DELETE CASCADE,
+                chat_id VARCHAR(255) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, chat_id)
+            );
+        """)
+        await db_manager.execute_command("""
             CREATE TABLE IF NOT EXISTS memories (
                 id UUID PRIMARY KEY,
                 user_id INT REFERENCES users(id) ON DELETE CASCADE,
