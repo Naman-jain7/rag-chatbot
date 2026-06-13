@@ -75,17 +75,11 @@ class LLMSettings(BaseSettings):
 
         return self
 
-
 class EmbeddingSettings(BaseSettings):
     HUGGINGFACEHUB_API_TOKEN: str = Field(..., validation_alias="HUGGINGFACEHUB_API_TOKEN")
     EMBEDDING_LLM: str = Field(..., validation_alias="EMBEDDING_LLM")
     EMBEDDING_LLM_DIMENSION: str = Field(..., validation_alias="EMBEDDING_LLM_DIMENSION")
     RERANKER_MODEL: str = Field(..., validation_alias="RERANKER_MODEL")
-
-class MemorySettings(BaseSettings):
-    MEM0_API_KEY: str = Field(..., validation_alias="MEM0_API_KEY")
-    MEM0_PROJECT: str = Field(..., validation_alias="MEM0_PROJECT")
-    MEM0_ORG_ID: Optional[str] = Field(None, validation_alias="MEM0_ORG_ID")
 
 class DatabaseConfig(BaseSettings):
     DB_DSN: Optional[str] = Field("", validation_alias="DB_DSN")
@@ -114,7 +108,6 @@ class AppConfig(BaseSettings):
     SECRET_KEY: str = Field(..., validation_alias='SECRET_KEY')
     LANGCHAIN_PROJECT: str = Field(..., validation_alias="LANGCHAIN_PROJECT")
 
-
 class Settings(BaseSettings):
     """Master Settings Object."""
 
@@ -122,7 +115,6 @@ class Settings(BaseSettings):
 
     llm: LLMSettings = LLMSettings()  # type: ignore
     embedding: EmbeddingSettings = EmbeddingSettings()  # type: ignore
-    memory: MemorySettings = MemorySettings() # type:ignore
     db: DatabaseConfig = DatabaseConfig()  # type: ignore
     services: ServicesSettings = ServicesSettings()  # type: ignore
     app_config: AppConfig = AppConfig()  # type: ignore
