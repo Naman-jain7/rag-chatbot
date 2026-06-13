@@ -1,11 +1,10 @@
-import os
 from collections.abc import Iterator
 from typing import Any
 
 import requests
 
 
-API_BASE_URL = os.getenv("DOCCHAT_API_URL", "http://127.0.0.1:8000/api/v1").rstrip("/")
+API_BASE_URL = "http://127.0.0.1:8000/api/v1"
 TIMEOUT_SECONDS = 60
 
 
