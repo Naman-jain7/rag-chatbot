@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = EmbeddingSettings()  # type: ignore
     db: DatabaseConfig = DatabaseConfig()  # type: ignore
     services: ServicesSettings = ServicesSettings()  # type: ignore
-    app_config: AppConfig = AppConfig()  # type: ignore
+    app: AppConfig = AppConfig()  # type: ignore
 
 
 settings = Settings()
@@ -158,4 +158,4 @@ LLM_PROVIDERS = [
     },
 ]
 
-RAW_DB_PATH = BASE_DIR / settings.app_config.DB_PATH
+RAW_DB_PATH = BASE_DIR / settings.app.DB_PATH

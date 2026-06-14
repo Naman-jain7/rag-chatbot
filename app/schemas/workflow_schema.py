@@ -8,8 +8,8 @@ class EvidenceEvaluation(BaseModel):
 
 class ChatRequest(BaseModel):
     user_id: int
-    query: str
     chat_id: Optional[str] = None
+    query: str
 
 class MemoryItem(BaseModel):
     text: str = Field(description="Atomic user memory as a short sentence")

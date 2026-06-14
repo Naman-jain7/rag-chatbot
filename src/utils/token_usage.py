@@ -6,7 +6,7 @@ def get_token_usage(user_id: int | str, session_id: str)->dict:
     
     latest_run = next(
         client.list_runs(
-            project_name=settings.app_config.LANGCHAIN_PROJECT,
+            project_name=settings.app.LANGCHAIN_PROJECT,
             is_root=True,
             limit=1,
             filter=f'and(eq(metadata_key, "thread_id"), eq(metadata_value, "{session_id}"))',

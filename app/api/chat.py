@@ -64,6 +64,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest):
                     citations_text = format_citations(final_state)
                     if citations_text:
                         await queue.put(citations_text)
+
                     usage = final_state.get("token_usage", {})
                     if usage:
                         import json
