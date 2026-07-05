@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional, Any
+from typing import Optional, Any, Annotated
 
 load_dotenv()
 
@@ -12,38 +12,32 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 class LLMSettings(BaseSettings):
     """LLM and Provider Configurations."""
 
-    OPENROUTER_PROVIDER_NAME: str = Field(..., validation_alias="OPENROUTER_PROVIDER_NAME")
-    OPENROUTER_MODEL_NAME: str = Field(..., validation_alias="OPENROUTER_MODEL_NAME")
-    OPENROUTER_API_KEY: Optional[str] = Field(..., validation_alias="OPENROUTER_API_KEY")
-    OPENROUTER_PRIORITY: int = Field(..., validation_alias="OPENROUTER_PRIORITY")
-    OPENROUTER_TIMEOUT: int = Field(..., validation_alias="OPENROUTER_TIMEOUT")
-    OPENROUTER_MAX_ATTEMPTS: int = Field(..., validation_alias="OPENROUTER_MAX_ATTEMPTS")
-    OPENROUTER_CIRCUIT_THRESHOLD: int = Field(..., validation_alias="OPENROUTER_CIRCUIT_THRESHOLD")
-    OPENROUTER_CIRCUIT_COOLDOWN: int = Field(..., validation_alias="OPENROUTER_CIRCUIT_COOLDOWN")
-    OPENROUTER_TIER: str = Field(..., validation_alias="OPENROUTER_TIER")
+    OPENROUTER_PROVIDER_NAME: Annotated[str, Field(default='openrouter', validation_alias="OPENROUTER_PROVIDER_NAME")]
+    OPENROUTER_MODEL_NAME: Annotated[str, Field(..., validation_alias="OPENROUTER_MODEL_NAME")]
+    OPENROUTER_API_KEY: Annotated[Optional[str], Field(..., validation_alias="OPENROUTER_API_KEY")]
+    OPENROUTER_PRIORITY: Annotated[int, Field(..., validation_alias="OPENROUTER_PRIORITY")]
 
-    GEMINI_PROVIDER_NAME: str = Field(..., validation_alias="GEMINI_PROVIDER_NAME")
-    GEMINI_MODEL_NAME: str = Field(..., validation_alias="GEMINI_MODEL_NAME")
-    GOOGLE_API_KEY: Optional[str] = Field(None, validation_alias="GOOGLE_API_KEY")
-    GEMINI_PRIORITY: int = Field(..., validation_alias="GEMINI_PRIORITY")
-    GEMINI_TIMEOUT: int = Field(..., validation_alias="GEMINI_TIMEOUT")
-    GEMINI_MAX_ATTEMPTS: int = Field(..., validation_alias="GEMINI_MAX_ATTEMPTS")
-    GEMINI_CIRCUIT_THRESHOLD: int = Field(..., validation_alias="GEMINI_CIRCUIT_THRESHOLD")
-    GEMINI_CIRCUIT_COOLDOWN: int = Field(..., validation_alias="GEMINI_CIRCUIT_COOLDOWN")
-    GEMINI_TIER: str = Field(..., validation_alias="GEMINI_TIER")
+    GEMINI_PROVIDER_NAME: Annotated[str, Field(default='gemini', validation_alias="GEMINI_PROVIDER_NAME")]
+    GEMINI_MODEL_NAME: Annotated[str, Field(..., validation_alias="GEMINI_MODEL_NAME")]
+    GOOGLE_API_KEY: Annotated[Optional[str], Field(..., validation_alias="GOOGLE_API_KEY")]
+    GEMINI_PRIORITY: Annotated[int, Field(..., validation_alias="GEMINI_PRIORITY")]
 
-    OLLAMA_PROVIDER_NAME: str = Field(..., validation_alias="OLLAMA_PROVIDER_NAME")
-    OLLAMA_MODEL_NAME: str = Field(..., validation_alias="OLLAMA_MODEL_NAME")
-    OLLAMA_API_KEY: Optional[str] = Field(None, validation_alias="OLLAMA_API_KEY")
-    OLLAMA_PRIORITY: int = Field(..., validation_alias="OLLAMA_PRIORITY")
-    OLLAMA_TIMEOUT: int = Field(..., validation_alias="OLLAMA_TIMEOUT")
-    OLLAMA_MAX_ATTEMPTS: int = Field(..., validation_alias="OLLAMA_MAX_ATTEMPTS")
-    OLLAMA_CIRCUIT_THRESHOLD: int = Field(..., validation_alias="OLLAMA_CIRCUIT_THRESHOLD")
-    OLLAMA_CIRCUIT_COOLDOWN: int = Field(..., validation_alias="OLLAMA_CIRCUIT_COOLDOWN")
-    OLLAMA_TIER: str = Field(..., validation_alias="OLLAMA_TIER")
+    OLLAMA_PROVIDER_NAME: Annotated[str, Field(default='ollama', validation_alias="OLLAMA_PROVIDER_NAME")]
+    OLLAMA_MODEL_NAME: Annotated[str, Field(..., validation_alias="OLLAMA_MODEL_NAME")]
+    OLLAMA_API_KEY: Annotated[Optional[str], Field(..., validation_alias="OLLAMA_API_KEY")]
+    OLLAMA_PRIORITY: Annotated[int, Field(..., validation_alias="OLLAMA_PRIORITY")]
 
-    MAX_TOKENS: int = Field(..., validation_alias="MAX_TOKENS")
-    TEMPERATURE: float = Field(..., validation_alias="TEMPERATURE")
+    OLLAMA_LOCAL_PROVIDER_NAME: str = Field(..., validation_alias="OLLAMA_LOCAL_PROVIDER_NAME")
+    OLLAMA_LOCAL_MODEL_NAME: str = Field(..., validation_alias="OLLAMA_LOCAL_MODEL_NAME")
+    OLLAMA_LOCAL_BASE_URL: str = Field(default="http://localhost:11434", validation_alias="OLLAMA_LOCAL_BASE_URL")
+    OLLAMA_LOCAL_PRIORITY: Annotated[int, Field(..., validation_alias="OLLAMA_LOCAL_PRIORITY")]
+
+    TIMEOUT: Annotated[int, Field(default=1, validation_alias="TIMEOUT")]
+    MAX_RETRIES: Annotated[int, Field(default=1, validation_alias="MAX_RETRIES")]
+    CIRCUIT_BREAKER_THRESHOLD: Annotated[int, Field(default=3, validation_alias="CIRCUIT_BREAKER_THRESHOLD")]
+    CIRCUIT_BREAKER_COOLDOWN: Annotated[int, Field(default=30, validation_alias="CIRCUIT_BREAKER_COOLDOWN")]
+    MAX_TOKENS: Annotated[int, Field(default=1024, validation_alias="MAX_TOKENS")]
+    TEMPERATURE: Annotated[float, Field(default=0.3, validation_alias="TEMPERATURE")]
 
     @model_validator(mode="after")
     def validate_providers(self)->"LLMSettings":
@@ -75,11 +69,40 @@ class LLMSettings(BaseSettings):
 
         return self
 
+
+class WhisperSettings(BaseSettings):
+    """
+    Configuration for the faster-whisper transcription model.
+
+    WHISPER_MODEL_SIZE   – Model variant: tiny | base | small | medium | large-v3
+                           Larger models are more accurate but slower and use more RAM.
+    WHISPER_COMPUTE_TYPE – Quantisation: int8 (fast, CPU) | float16 (GPU) | float32
+    WHISPER_DEVICE       – 'auto' resolves to 'cuda' if a GPU is available, else 'cpu'.
+    """
+    WHISPER_MODEL_SIZE:   str = Field(default="base", validation_alias="WHISPER_MODEL_SIZE")
+    WHISPER_COMPUTE_TYPE: str = Field(default="int8", validation_alias="WHISPER_COMPUTE_TYPE")
+    WHISPER_DEVICE:       str = Field(default="auto", validation_alias="WHISPER_DEVICE")
+
+
 class EmbeddingSettings(BaseSettings):
     HUGGINGFACEHUB_API_TOKEN: str = Field(..., validation_alias="HUGGINGFACEHUB_API_TOKEN")
-    EMBEDDING_LLM: str = Field(..., validation_alias="EMBEDDING_LLM")
-    EMBEDDING_LLM_DIMENSION: str = Field(..., validation_alias="EMBEDDING_LLM_DIMENSION")
+    EMBEDDING_MODEL: Annotated[str, Field(validation_alias="EMBEDDING_MODEL")]
+    EMBEDDING_DIMENSION: Annotated[int, Field(validation_alias="EMBEDDING_DIMENSION")]
+    EMBEDDINGS_TABLE_NAME:Annotated[str, Field(..., validation_alias='EMBEDDINGS_TABLE_NAME')]
     RERANKER_MODEL: str = Field(..., validation_alias="RERANKER_MODEL")
+
+    CHUNK_SIZE: Annotated[int, Field(..., validation_alias="CHUNK_SIZE")]
+    CHUNK_OVERLAP: Annotated[int, Field(..., validation_alias="CHUNK_OVERLAP")]
+
+    @model_validator(mode="after")
+    def validate_overlap(self) -> "EmbeddingSettings":
+        if self.CHUNK_SIZE <= 0:
+            raise ValueError("chunk_size must be > 0")
+        if self.CHUNK_OVERLAP < 0:
+            raise ValueError("chunk_overlap cannot be < 0")
+        if self.CHUNK_OVERLAP >= self.CHUNK_SIZE:
+            raise ValueError("chunk_overlap must be < chunk_size.")
+        return self
 
 class DatabaseConfig(BaseSettings):
     DB_DSN: Optional[str] = Field("", validation_alias="DB_DSN")
@@ -103,9 +126,13 @@ class ServicesSettings(BaseSettings):
 class AppConfig(BaseSettings):
     APP_NAME: str = Field(..., validation_alias="APP_NAME")
     APP_VERSION: str = Field(..., validation_alias="APP_VERSION")
-    DB_PATH: str = Field(..., validation_alias="DB_PATH")
-    SYS_PROMPTS_PATH: str = Field(..., validation_alias="SYS_PROMPTS_PATH")
     SECRET_KEY: str = Field(..., validation_alias='SECRET_KEY')
+
+    DB_PATH: str = Field(..., validation_alias="DB_PATH")
+    VECTOR_DB_PATH: str = Field(..., validation_alias="VECTOR_DB_PATH")
+
+    SYS_PROMPTS_PATH: str = Field(..., validation_alias="SYS_PROMPTS_PATH")
+
     LANGCHAIN_PROJECT: str = Field(..., validation_alias="LANGCHAIN_PROJECT")
 
 class Settings(BaseSettings):
@@ -118,6 +145,7 @@ class Settings(BaseSettings):
     db: DatabaseConfig = DatabaseConfig()  # type: ignore
     services: ServicesSettings = ServicesSettings()  # type: ignore
     app: AppConfig = AppConfig()  # type: ignore
+    whisper: WhisperSettings = WhisperSettings()  # type: ignore
 
 
 settings = Settings()
@@ -128,34 +156,27 @@ LLM_PROVIDERS = [
         "model": settings.llm.GEMINI_MODEL_NAME,
         "api_key": settings.llm.GOOGLE_API_KEY,
         "priority": settings.llm.GEMINI_PRIORITY,
-        "timeout": settings.llm.GEMINI_TIMEOUT,
-        "max_attempts": settings.llm.GEMINI_MAX_ATTEMPTS,
-        "circuit_threshold": settings.llm.GEMINI_CIRCUIT_THRESHOLD,
-        "circuit_cooldown": settings.llm.GEMINI_CIRCUIT_COOLDOWN,
-        "tier": settings.llm.GEMINI_TIER,
     },
     {
         "name": settings.llm.OPENROUTER_PROVIDER_NAME,
         "model": settings.llm.OPENROUTER_MODEL_NAME,
         "api_key": settings.llm.OPENROUTER_API_KEY,
         "priority": settings.llm.OPENROUTER_PRIORITY,
-        "timeout": settings.llm.OPENROUTER_TIMEOUT,
-        "max_attempts": settings.llm.OPENROUTER_MAX_ATTEMPTS,
-        "circuit_threshold": settings.llm.OPENROUTER_CIRCUIT_THRESHOLD,
-        "circuit_cooldown": settings.llm.OPENROUTER_CIRCUIT_COOLDOWN,
-        "tier": settings.llm.OPENROUTER_TIER,
     },
     {
         "name": settings.llm.OLLAMA_PROVIDER_NAME,
         "model": settings.llm.OLLAMA_MODEL_NAME,
         "api_key": settings.llm.OLLAMA_API_KEY,
         "priority": settings.llm.OLLAMA_PRIORITY,
-        "timeout": settings.llm.OLLAMA_TIMEOUT,
-        "max_attempts": settings.llm.OLLAMA_MAX_ATTEMPTS,
-        "circuit_threshold": settings.llm.OLLAMA_CIRCUIT_THRESHOLD,
-        "circuit_cooldown": settings.llm.OLLAMA_CIRCUIT_COOLDOWN,
-        "tier": settings.llm.OLLAMA_TIER,
+    },
+    {
+        "name": settings.llm.OLLAMA_LOCAL_PROVIDER_NAME,
+        "model": settings.llm.OLLAMA_LOCAL_MODEL_NAME,
+        "api_key": None,
+        "base_url": settings.llm.OLLAMA_LOCAL_BASE_URL,
+        "priority": settings.llm.OLLAMA_LOCAL_PRIORITY,
     },
 ]
 
 RAW_DB_PATH = BASE_DIR / settings.app.DB_PATH
+VECTOR_DB_PATH = BASE_DIR / settings.app.VECTOR_DB_PATH

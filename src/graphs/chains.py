@@ -32,7 +32,7 @@ def _get_query_embeddings() -> HuggingFaceEmbeddings:
     global _query_embeddings
     if _query_embeddings is None:
         LLM_LOGGER.info("Loading HuggingFaceEmbeddings for query encoding...")
-        _query_embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_LLM)
+        _query_embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_MODEL)
     return _query_embeddings
 
 load_dotenv()

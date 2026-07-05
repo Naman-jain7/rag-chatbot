@@ -17,7 +17,7 @@ class LongTermMemory:
     and lower-level transactional execution boundaries against PostgreSQL.
     """
     def __init__(self):
-        self._embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_LLM)
+        self._embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_MODEL)
         self._fast_llm = ResilientLLMManager(providers=fast_providers) # type: ignore
 
     def _get_embeddings(self) -> HuggingFaceEmbeddings:

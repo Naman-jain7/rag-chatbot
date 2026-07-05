@@ -1,19 +1,19 @@
 from typing import Any, AsyncIterator, Dict, List
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
-from app.core.config import LLM_PROVIDERS
+from app.core.config import LLM_PROVIDERS, settings
+from src.graphs.tools import tools
 from src.llm.base import BaseLLMProvider
 from src.llm.config import ProviderConfig
 from src.utils.exception import ExternalServiceError
 from src.utils.logger import LLM_LOGGER
-from src.graphs.tools import tools
 
-from langchain_core.messages import BaseMessage
 
 def _convert_messages(messages: List[Any]) -> List[Any]:
     lc_messages = []
@@ -43,8 +43,8 @@ class OpenRouterProvider(BaseLLMProvider):
             model=self._config.model,
             api_key=self._config.api_key,  # type: ignore
             base_url=self.endpoint,
-            timeout=self._config.timeout,
-            max_retries=self._config.max_attempts,
+            timeout=settings.llm.TIMEOUT,
+            max_retries=settings.llm.MAX_RETRIES,
         ).bind_tools(tools)
         
         LLM_LOGGER.info(
@@ -99,8 +99,8 @@ class GeminiProvider(BaseLLMProvider):
         self.llm = ChatGoogleGenerativeAI(
             model=self._config.model,
             google_api_key=self._config.api_key,
-            timeout=self._config.timeout,
-            max_retries=self._config.max_attempts,
+            timeout=settings.llm.TIMEOUT,
+            max_retries=settings.llm.MAX_RETRIES,
         ).bind_tools(tools)
        
         LLM_LOGGER.info("Gemini provider initialized: model=%s", self._config.model)
@@ -144,8 +144,8 @@ class OllamaProvider(BaseLLMProvider):
             model=self._config.model,
             api_key=self._config.api_key or "ollama", # type: ignore
             base_url=self.endpoint,
-            timeout=self._config.timeout,
-            max_retries=self._config.max_attempts,
+            timeout=settings.llm.TIMEOUT,
+            max_retries=settings.llm.MAX_RETRIES,
         ).bind_tools(tools)
         
         LLM_LOGGER.info(
@@ -192,25 +192,76 @@ class OllamaProvider(BaseLLMProvider):
             LLM_LOGGER.warning("Ollama unavailable: %s", e)
             return False
 
+class OllamaLocalProvider(BaseLLMProvider):
+    def __init__(self, config: ProviderConfig) -> None:
+        super().__init__(config)
+        self._config = config
+        self.llm = ChatOllama(
+            model=self._config.model,
+            base_url=self._config.base_url,
+            temperature=settings.llm.TEMPERATURE,
+            num_predict=settings.llm.MAX_TOKENS,
+            client_kwargs={"timeout": settings.llm.TIMEOUT},
+        ).bind_tools(tools)
+
+        LLM_LOGGER.info(
+            "Local Ollama provider initialized: model=%s, base_url=%s",
+            self._config.model,
+            self._config.base_url,
+        )
+
+    @traceable(run_type="llm", name="Ollama_Local")
+    async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
+        lc_messages = _convert_messages(messages)
+
+        try:
+            async for chunk in self.llm.astream(lc_messages, **kwargs):
+                yield chunk
+        except Exception as e:
+            LLM_LOGGER.error("Local Ollama error during generate_stream: %s", e, exc_info=True)
+            raise ExternalServiceError(f"Local Ollama generation failed: {str(e)}")
+
+    @traceable(run_type="llm", name="Ollama_Local_Structured")
+    async def generate_structured(self, messages: List[Dict], schema: type, **kwargs):
+        lc_messages = _convert_messages(messages)
+
+        try:
+            structured_llm = self.llm.with_structured_output(schema)  # type: ignore
+            return await structured_llm.ainvoke(lc_messages, **kwargs)
+        except Exception as e:
+            LLM_LOGGER.error("Local Ollama error during generate_structured: %s", e, exc_info=True)
+            raise ExternalServiceError(f"Local Ollama structured generation failed: {str(e)}")
+
+    async def is_available(self) -> bool:
+        try:
+            async for _ in self.generate_stream([{"role": "user", "content": "ping"}]):
+                break
+            LLM_LOGGER.info("Local Ollama is available")
+            return True
+        except Exception as e:
+            LLM_LOGGER.warning("Local Ollama unavailable: %s", e)
+            return False
+
+
 def _create_provider(p_dict: dict):
     cfg = ProviderConfig(
         name=p_dict["name"],
         model=p_dict["model"],
         api_key=p_dict.get("api_key"),
+        base_url=p_dict.get("base_url"),
         priority=p_dict.get("priority", 99),
-        timeout=p_dict.get("timeout", 30.0),
-        max_attempts=p_dict.get("max_attempts", 3),
-        circuit_breaker_threshold=p_dict.get("circuit_threshold", 5),
-        circuit_breaker_cooldown=p_dict.get("circuit_cooldown", 30.0),
-        tier=p_dict.get("tier", 'slow'),
     )
 
-    if cfg.name == "openrouter":
+    provider_name = cfg.name.strip().lower().replace("_", " ")
+
+    if provider_name == "openrouter":
         return OpenRouterProvider(cfg)
-    elif cfg.name == "gemini":
+    elif provider_name == "gemini":
         return GeminiProvider(cfg)
-    elif cfg.name == "ollama":
+    elif provider_name == "ollama":
         return OllamaProvider(cfg)
+    elif provider_name == "ollama local":
+        return OllamaLocalProvider(cfg)
     else:
         raise ValueError(f"Unknown provider name: {cfg.name}")
 
@@ -218,5 +269,5 @@ def _create_provider(p_dict: dict):
 sorted_provider_dicts = sorted(LLM_PROVIDERS, key=lambda x: x.get("priority", 99))
 providers_list = [_create_provider(p) for p in sorted_provider_dicts]
 
-fast_providers = [p for p in providers_list if p._config.tier=='fast']
-slow_providers = [p for p in providers_list if p._config.tier=='slow']
+fast_providers = providers_list
+slow_providers = providers_list

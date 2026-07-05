@@ -23,7 +23,7 @@ def _get_embeddings() -> HuggingFaceEmbeddings:
     global _embeddings
     if _embeddings is None:
         APP_LOGGER.info("Loading HuggingFaceEmbeddings for document ingestion...")
-        _embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_LLM)
+        _embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_MODEL)
     return _embeddings
 
 

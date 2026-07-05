@@ -8,11 +8,6 @@ class ProviderConfig(BaseModel):
     api_key: str | None
     base_url: Optional[str] = None
     priority: int           # lower = tried first
-    timeout: float = 30.0
-    max_attempts: int = 3
-    circuit_breaker_threshold: int = 5
-    circuit_breaker_cooldown: float = 30.0
-    tier: str = 'slow'
 
 
 class RetryConfig:

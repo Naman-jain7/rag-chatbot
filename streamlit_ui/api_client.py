@@ -51,10 +51,16 @@ def login(email: str, password: str) -> dict[str, Any]:
     return response.json()
 
 
-def list_documents(user_id: int, token: str) -> list[dict[str, Any]]:
+def list_documents(
+    user_id: int,
+    token: str,
+    source_type: str | None = None,
+) -> list[dict[str, Any]]:
+    params = {"type": source_type} if source_type else None
     response = requests.get(
         f"{API_BASE_URL}/documents/{user_id}",
         headers=_auth_headers(token),
+        params=params,
         timeout=TIMEOUT_SECONDS,
     )
     _raise_for_status(response)
@@ -64,6 +70,18 @@ def list_documents(user_id: int, token: str) -> list[dict[str, Any]]:
 def upload_document(user_id: int, token: str, uploaded_file: Any) -> dict[str, Any]:
     response = requests.post(
         f"{API_BASE_URL}/upload",
+        headers=_auth_headers(token),
+        data={"user_id": str(user_id)},
+        files={"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)},
+        timeout=None,
+    )
+    _raise_for_status(response)
+    return response.json()
+
+
+def upload_audio(user_id: int, token: str, uploaded_file: Any) -> dict[str, Any]:
+    response = requests.post(
+        f"{API_BASE_URL}/upload-audio",
         headers=_auth_headers(token),
         data={"user_id": str(user_id)},
         files={"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)},
