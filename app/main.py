@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -7,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.core.config import settings
 from app.db.manager import db_manager
+from src.utils.exception import AppException
 from src.utils.logger import APP_LOGGER, EMBEDDING_LOGGER
 
 
@@ -81,7 +83,7 @@ async def lifespan(app: FastAPI):
                 page_range VARCHAR(50),
                 version_id VARCHAR(50),
                 chunk_text TEXT NOT NULL,
-                embedding VECTOR({settings.embedding.EMBEDDING_LLM_DIMENSION}),
+                embedding VECTOR({settings.embedding.EMBEDDING_DIMENSION}),
                 fts tsvector GENERATED ALWAYS AS (to_tsvector('english', chunk_text)) STORED,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -93,7 +95,7 @@ async def lifespan(app: FastAPI):
         await db_manager.execute_command(f"""
             CREATE TABLE IF NOT EXISTS memory_embeddings (
                 memory_id UUID PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
-                embedding VECTOR({settings.embedding.EMBEDDING_LLM_DIMENSION})
+                embedding VECTOR({settings.embedding.EMBEDDING_DIMENSION})
             );
         """)
         await db_manager.execute_command("""
@@ -112,8 +114,9 @@ async def lifespan(app: FastAPI):
     cp_pool = None
     try:
         from psycopg_pool import AsyncConnectionPool
-        from src.memory.short_term_memory import build_checkpointer
+
         from src.graphs.chains import workflow  # import the uncompiled workflow
+        from src.memory.short_term_memory import build_checkpointer
 
         cp_pool = AsyncConnectionPool(
             conninfo=settings.db.DB_DSN, # type: ignore
@@ -140,9 +143,8 @@ async def lifespan(app: FastAPI):
 
     # ── 5. Pre-warm embedding model ───────────────────────────────────────────
     try:
-        import asyncio
         from langchain_huggingface import HuggingFaceEmbeddings
-        await asyncio.to_thread(HuggingFaceEmbeddings, model_name=settings.embedding.EMBEDDING_LLM)
+        await asyncio.to_thread(HuggingFaceEmbeddings, model_name=settings.embedding.EMBEDDING_MODEL)
         EMBEDDING_LOGGER.info("Embedding model pre-loaded successfully.")
     except Exception as e:
         EMBEDDING_LOGGER.warning(f"Could not pre-load embedding model: {e}")
@@ -171,6 +173,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=422,
         content={"detail": f"'{field}': {msg}"},
+    )
+
+
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.message, "error_code": exc.error_code},
     )
 
 

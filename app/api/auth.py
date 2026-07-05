@@ -69,7 +69,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     
     user = await db_manager.get_user_by_email(form_data.username)
     if not user:
-        raise UnauthenticatedError(message="Incorrect email or password")
+        raise UnauthenticatedError(message="Email not registered. Please sign up.")
         
     # Verify password
     if not bcrypt.checkpw(form_data.password.encode('utf-8'), user['hashed_password'].encode('utf-8')):
