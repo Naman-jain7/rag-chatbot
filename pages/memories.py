@@ -20,6 +20,20 @@ except api_client.requests.RequestException:
     st.error("Could not reach the API. Make sure FastAPI is running.")
     st.stop()
 
+st.subheader("Add New Memory")
+with st.form("add_memory_form", clear_on_submit=True):
+    new_memory_text = st.text_input("Memory text", placeholder="e.g. My favorite color is blue.")
+    submitted = st.form_submit_button("Add Memory", type="primary")
+    if submitted and new_memory_text.strip():
+        try:
+            api_client.add_memory(user_id, token, new_memory_text.strip())
+            st.toast("Memory added successfully.")
+            st.rerun()
+        except api_client.ApiError as exc:
+            st.error(f"Could not add memory: {exc}")
+
+st.divider()
+
 col1, col2 = st.columns([3, 1])
 with col1:
     st.subheader(f"Memories ({len(memories)})")

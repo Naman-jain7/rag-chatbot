@@ -1,7 +1,18 @@
 from fastapi import APIRouter
+from pydantic import BaseModel
+
 from app.db.manager import db_manager
+from src.memory.long_term_memory import long_term_memory as memory_service
 
 router = APIRouter()
+
+class MemoryCreate(BaseModel):
+    memory_text: str
+
+@router.post("/memories/{user_id}")
+async def add_memory(user_id: int, request: MemoryCreate):
+    await memory_service.store_batch(user_id, [request.memory_text])
+    return {"message": "Memory added successfully"}
 
 @router.get("/memories/{user_id}")
 async def list_memories(user_id: int):

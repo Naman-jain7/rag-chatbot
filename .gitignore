@@ -10,11 +10,17 @@ __pycache__/
 *.bin
 *.gguf
 
+
 .langchain.log
 logs/
 graphify-out/
+
 
 /data/vector_db/*
 !/data/vector_db/.gitkeep
 personal/
 data/
+
+
+rough.py
+audio.m4a

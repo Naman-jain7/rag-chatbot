@@ -129,6 +129,16 @@ def list_memories(user_id: int, token: str) -> list[dict]:
     return response.json()["memories"]
 
 
+def add_memory(user_id: int, token: str, memory_text: str) -> None:
+    response = requests.post(
+        f"{API_BASE_URL}/memories/{user_id}",
+        headers=_auth_headers(token),
+        json={"memory_text": memory_text},
+        timeout=TIMEOUT_SECONDS,
+    )
+    _raise_for_status(response)
+
+
 def delete_memory(user_id: int, token: str, memory_id: str) -> None:
     response = requests.delete(
         f"{API_BASE_URL}/memories/{user_id}/{memory_id}",
@@ -149,6 +159,7 @@ def delete_all_memories(user_id: int, token: str) -> None:
 
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
 
 def get_chat_history(token: str, user_id: int | str, chat_id: str) -> dict[str, Any]:
     """Fetch conversation historical messages from the backend checkpointer."""

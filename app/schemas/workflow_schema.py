@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional
 from enum import Enum
 
 class EvidenceEvaluation(BaseModel):
@@ -10,15 +10,6 @@ class ChatRequest(BaseModel):
     user_id: int
     chat_id: Optional[str] = None
     query: str
-
-class MemoryItem(BaseModel):
-    text: str = Field(description="Atomic user memory as a short sentence")
-    is_new: bool = Field(description="True if new, false if duplicate")
-
-class MemoryDecision(BaseModel):
-    should_write: bool = Field(description="Whether to store any memories")
-    memories: List[MemoryItem] = Field(default_factory=list)
-
 
 
 class RouteDestination(str, Enum):
