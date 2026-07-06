@@ -10,24 +10,3 @@ class ChatRequest(BaseModel):
     user_id: int
     chat_id: Optional[str] = None
     query: str
-
-
-class RouteDestination(str, Enum):
-    MEMORY = "memory"
-    RETRIEVE = "retrieve"
-    TOOLS = "tools"
-
-class QueryRouter(BaseModel):
-    """Schema for checking if query can be answered using memory context"""
-
-    route: RouteDestination = Field(...,description=(
-            "Select the best path to answer the query: "
-            "'memory' for stored user context; "
-            "'retrieve' for vector DB/RAG lookup; "
-            "'tools' for external APIs/functions; "
-        ),
-    )
-    
-    confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence score of the routing decision, ranging from 0.0 (no confidence) to 1.0 (absolute certainty).")
-    
-    # reasoning: str = Field(..., description="Brief justification explaining why the memory context is or is not sufficient to fulfill the query.")

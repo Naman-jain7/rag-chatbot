@@ -152,16 +152,11 @@ settings = Settings()
 
 LLM_PROVIDERS = [
     {
-        "name": settings.llm.GEMINI_PROVIDER_NAME,
-        "model": settings.llm.GEMINI_MODEL_NAME,
-        "api_key": settings.llm.GOOGLE_API_KEY,
-        "priority": settings.llm.GEMINI_PRIORITY,
-    },
-    {
-        "name": settings.llm.OPENROUTER_PROVIDER_NAME,
-        "model": settings.llm.OPENROUTER_MODEL_NAME,
-        "api_key": settings.llm.OPENROUTER_API_KEY,
-        "priority": settings.llm.OPENROUTER_PRIORITY,
+        "name": settings.llm.OLLAMA_LOCAL_PROVIDER_NAME,
+        "model": settings.llm.OLLAMA_LOCAL_MODEL_NAME,
+        "api_key": None,
+        "base_url": settings.llm.OLLAMA_LOCAL_BASE_URL,
+        "priority": settings.llm.OLLAMA_LOCAL_PRIORITY,
     },
     {
         "name": settings.llm.OLLAMA_PROVIDER_NAME,
@@ -170,12 +165,17 @@ LLM_PROVIDERS = [
         "priority": settings.llm.OLLAMA_PRIORITY,
     },
     {
-        "name": settings.llm.OLLAMA_LOCAL_PROVIDER_NAME,
-        "model": settings.llm.OLLAMA_LOCAL_MODEL_NAME,
-        "api_key": None,
-        "base_url": settings.llm.OLLAMA_LOCAL_BASE_URL,
-        "priority": settings.llm.OLLAMA_LOCAL_PRIORITY,
+        "name": settings.llm.OPENROUTER_PROVIDER_NAME,
+        "model": settings.llm.OPENROUTER_MODEL_NAME,
+        "api_key": settings.llm.OPENROUTER_API_KEY,
+        "priority": settings.llm.OPENROUTER_PRIORITY,
     },
+    {
+        "name": settings.llm.GEMINI_PROVIDER_NAME,
+        "model": settings.llm.GEMINI_MODEL_NAME,
+        "api_key": settings.llm.GOOGLE_API_KEY,
+        "priority": settings.llm.GEMINI_PRIORITY,
+    }
 ]
 
 RAW_DB_PATH = BASE_DIR / settings.app.DB_PATH

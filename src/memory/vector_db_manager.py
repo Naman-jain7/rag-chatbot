@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 import os
 import re
@@ -147,7 +148,7 @@ class VectorDBManager:
             LIMIT 20
         """
         embedding_str = f"[{','.join(map(str, query_embedding))}]"
-        vector_results = await db_manager.fetch_rows(vector_query, embedding_str, user_id)
+        vector_task = db_manager.fetch_rows(vector_query, embedding_str, user_id)
 
         # 2. BM25 / Full Text Search (Top 20)
         fts_query = """
@@ -158,7 +159,8 @@ class VectorDBManager:
             ORDER BY fts_score DESC
             LIMIT 20
         """
-        fts_results = await db_manager.fetch_rows(fts_query, query_text, user_id)
+        fts_task = db_manager.fetch_rows(fts_query, query_text, user_id)
+        vector_results, fts_results = await asyncio.gather(vector_task, fts_task)
 
         # 3. Merge and deduplicate
         merged_docs = {}
@@ -184,7 +186,7 @@ class VectorDBManager:
         # 4. Rerank using CrossEncoder
         reranker = self._get_reranker()
         pairs = [[query_text, doc['chunk_text']] for doc in candidates]
-        scores = reranker.predict(pairs)
+        scores = await asyncio.to_thread(reranker.predict, pairs)
 
         for doc, score in zip(candidates, scores):
             doc['rerank_score'] = float(score)

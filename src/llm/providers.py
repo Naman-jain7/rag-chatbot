@@ -8,7 +8,6 @@ from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
 from app.core.config import LLM_PROVIDERS, settings
-from src.graphs.tools import tools
 from src.llm.base import BaseLLMProvider
 from src.llm.config import ProviderConfig
 from src.utils.exception import ExternalServiceError
@@ -45,7 +44,7 @@ class OpenRouterProvider(BaseLLMProvider):
             base_url=self.endpoint,
             timeout=settings.llm.TIMEOUT,
             max_retries=settings.llm.MAX_RETRIES,
-        ).bind_tools(tools)
+        )
         
         LLM_LOGGER.info(
             "OpenRouter provider initialized: model=%s, endpoint=%s",
@@ -56,8 +55,9 @@ class OpenRouterProvider(BaseLLMProvider):
     @traceable(run_type="llm", name="OpenRouter")
     async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
+        llm = self.llm
         try:
-            async for chunk in self.llm.astream(lc_messages, **kwargs):
+            async for chunk in llm.astream(lc_messages, **kwargs):
                 yield chunk
         except Exception as e:
             LLM_LOGGER.error(
@@ -101,15 +101,16 @@ class GeminiProvider(BaseLLMProvider):
             google_api_key=self._config.api_key,
             timeout=settings.llm.TIMEOUT,
             max_retries=settings.llm.MAX_RETRIES,
-        ).bind_tools(tools)
+        )
        
         LLM_LOGGER.info("Gemini provider initialized: model=%s", self._config.model)
 
     @traceable(run_type="llm", name="Gemini")
     async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
+        llm = self.llm
         try:
-            async for chunk in self.llm.astream(lc_messages, **kwargs):
+            async for chunk in llm.astream(lc_messages, **kwargs):
                 yield chunk
         except Exception as e:
             LLM_LOGGER.error("Gemini error during generate_stream: %s", e, exc_info=True)
@@ -146,7 +147,7 @@ class OllamaProvider(BaseLLMProvider):
             base_url=self.endpoint,
             timeout=settings.llm.TIMEOUT,
             max_retries=settings.llm.MAX_RETRIES,
-        ).bind_tools(tools)
+        )
         
         LLM_LOGGER.info(
             "Ollama provider initialized (ChatOpenAI wrapper): model=%s, endpoint=%s",
@@ -157,9 +158,10 @@ class OllamaProvider(BaseLLMProvider):
     @traceable(run_type="llm", name="Ollama")
     async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
+        llm = self.llm
         
         try:
-            async for chunk in self.llm.astream(lc_messages, **kwargs):
+            async for chunk in llm.astream(lc_messages, **kwargs):
                 yield chunk
         except Exception as e:
             LLM_LOGGER.error("Ollama error during generate_stream: %s", e, exc_info=True)
@@ -202,7 +204,7 @@ class OllamaLocalProvider(BaseLLMProvider):
             temperature=settings.llm.TEMPERATURE,
             num_predict=settings.llm.MAX_TOKENS,
             client_kwargs={"timeout": settings.llm.TIMEOUT},
-        ).bind_tools(tools)
+        )
 
         LLM_LOGGER.info(
             "Local Ollama provider initialized: model=%s, base_url=%s",
@@ -213,9 +215,10 @@ class OllamaLocalProvider(BaseLLMProvider):
     @traceable(run_type="llm", name="Ollama_Local")
     async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
+        llm = self.llm
 
         try:
-            async for chunk in self.llm.astream(lc_messages, **kwargs):
+            async for chunk in llm.astream(lc_messages, **kwargs):
                 yield chunk
         except Exception as e:
             LLM_LOGGER.error("Local Ollama error during generate_stream: %s", e, exc_info=True)
@@ -252,22 +255,21 @@ def _create_provider(p_dict: dict):
         priority=p_dict.get("priority", 99),
     )
 
-    provider_name = cfg.name.strip().lower().replace("_", " ")
-
-    if provider_name == "openrouter":
+    if cfg.name == "openrouter":
         return OpenRouterProvider(cfg)
-    elif provider_name == "gemini":
+    elif cfg.name == "gemini":
         return GeminiProvider(cfg)
-    elif provider_name == "ollama":
+    elif cfg.name == "ollama":
         return OllamaProvider(cfg)
-    elif provider_name == "ollama local":
+    elif cfg.name == "ollama local":
         return OllamaLocalProvider(cfg)
     else:
         raise ValueError(f"Unknown provider name: {cfg.name}")
 
+ollama_local_llm = _create_provider(LLM_PROVIDERS[0])
+ollama_llm = _create_provider(LLM_PROVIDERS[1])
+openrouter_llm = _create_provider(LLM_PROVIDERS[2])
+gemini_llm = _create_provider(LLM_PROVIDERS[3])
 
-sorted_provider_dicts = sorted(LLM_PROVIDERS, key=lambda x: x.get("priority", 99))
-providers_list = [_create_provider(p) for p in sorted_provider_dicts]
-
-fast_providers = providers_list
-slow_providers = providers_list
+# sorted_provider_dicts = sorted(LLM_PROVIDERS, key=lambda x: x.get("priority", 99))
+# providers_list = [_create_provider(p) for p in sorted_provider_dicts]
