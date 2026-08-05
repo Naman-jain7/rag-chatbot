@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from typing import Any, dict
+from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser

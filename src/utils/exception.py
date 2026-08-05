@@ -1,4 +1,5 @@
-from typing import Dict, Optional, Any
+from typing import Any
+
 from src.utils.logger import APP_LOGGER
 
 
@@ -13,7 +14,7 @@ class AppException(Exception):
         message: str,
         error_code: str = "INTERNAL_SERVER_ERROR",
         status_code: int = 500,
-        payload: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -26,7 +27,7 @@ class AppException(Exception):
             exc_info=True,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serializes the error for API responses."""
         return {
             "error": {
@@ -40,7 +41,7 @@ class AppException(Exception):
 class ValidationError(AppException):
     """Raised when input validation fails."""
 
-    def __init__(self, message: str, payload: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, message: str, payload: dict[str, Any] | None = None) -> None:
         super().__init__(
             message=message,
             error_code="VALIDATION_ERROR",
@@ -52,7 +53,7 @@ class ValidationError(AppException):
 class ResourceNotFoundError(AppException):
     """Raised when a requested resource does not exist."""
 
-    def __init__(self, message: str, payload: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, message: str, payload: dict[str, Any] | None = None) -> None:
         super().__init__(
             message=message, error_code="NOT_FOUND", status_code=404, payload=payload
         )
@@ -64,7 +65,7 @@ class UnauthenticatedError(AppException):
     def __init__(
         self,
         message: str = "Authentication required",
-        payload: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -80,7 +81,7 @@ class PermissionDeniedError(AppException):
     def __init__(
         self,
         message: str = "Permission denied",
-        payload: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -93,7 +94,7 @@ class PermissionDeniedError(AppException):
 class ConflictError(AppException):
     """Raised when a resource conflict occurs (e.g., duplicate unique field)."""
 
-    def __init__(self, message: str, payload: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, message: str, payload: dict[str, Any] | None = None) -> None:
         super().__init__(
             message=message, error_code="CONFLICT", status_code=409, payload=payload
         )
@@ -105,7 +106,7 @@ class ExternalServiceError(AppException):
     def __init__(
         self,
         message: str = "External service unavailable",
-        payload: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -121,7 +122,7 @@ class RateLimitExceededError(AppException):
     def __init__(
         self,
         message: str = "Rate limit exceeded",
-        payload: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -135,7 +136,7 @@ class AllProvidersExhaustedError(AppException):
     def __init__(
         self,
         message: str = "Rate limit exceeded",
-        payload: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             message=message,
