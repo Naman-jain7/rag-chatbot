@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage
 
 from app.db.manager import db_manager
 from app.schemas.workflow_schema import ChatRequest
+from src.utils.exception import ExternalServiceError, ResourceNotFoundError
 
 router = APIRouter()
 
@@ -97,7 +98,12 @@ async def get_chat_history(request: Request, user_id: int | str, chat_id: str):
         chat_id,
     )
     if not owner:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        raise ResourceNotFoundError("Conversation not found")
+
+    if not getattr(request.app.state, "checkpointer_ready", False):
+        raise ExternalServiceError(
+            "Chat history is unavailable because the LangGraph checkpointer did not initialize."
+        )
 
     import src.graphs.chains as chains_module
     graph = getattr(request.app.state, "graph", chains_module.graph)

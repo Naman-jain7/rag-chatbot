@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -10,6 +11,9 @@ from app.core.config import settings
 from app.db.manager import db_manager
 from src.utils.exception import AppException
 from src.utils.logger import APP_LOGGER, EMBEDDING_LOGGER
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 @asynccontextmanager
@@ -112,6 +116,7 @@ async def lifespan(app: FastAPI):
 
         checkpointer = await build_checkpointer(cp_pool) # type: ignore
         app.state.checkpointer = checkpointer
+        app.state.checkpointer_ready = True
 
         # Recompile the graph with the real async checkpointer
         import src.graphs.chains as chains_module
@@ -120,6 +125,8 @@ async def lifespan(app: FastAPI):
         APP_LOGGER.info("AsyncPostgresSaver checkpointer initialised and graph recompiled.")
     except Exception as e:
         APP_LOGGER.error(f"Failed to initialise checkpointer: {e}. Running without persistent memory.")
+        app.state.checkpointer = None
+        app.state.checkpointer_ready = False
         # Fall back: graph was already compiled without a checkpointer in chains.py
         import src.graphs.chains as chains_module
         app.state.graph = chains_module.graph
