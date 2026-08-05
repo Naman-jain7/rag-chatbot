@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import auth, chat, delete_docs, ingest_audio, ingest_docs, list_docs, memories
+from app.api import auth, chat, delete_docs, ingest_audio, ingest_docs, list_docs
 
 api_router = APIRouter()
 
@@ -10,4 +10,3 @@ api_router.include_router(ingest_docs.router, tags=["Ingestion"])
 api_router.include_router(ingest_audio.router, tags=["Ingestion"])
 api_router.include_router(list_docs.router, tags=["Documents"])
 api_router.include_router(delete_docs.router, tags=["Documents"])
-api_router.include_router(memories.router, tags=["Memories"])

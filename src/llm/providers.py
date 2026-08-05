@@ -1,4 +1,5 @@
-from typing import Any, AsyncIterator, Dict, List
+from collections.abc import AsyncIterator
+from typing import Any, dict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser
@@ -14,22 +15,27 @@ from src.utils.exception import ExternalServiceError
 from src.utils.logger import LLM_LOGGER
 
 
-def _convert_messages(messages: List[Any]) -> List[Any]:
+def _convert_messages(messages: list[Any]) -> list[Any]:
     lc_messages = []
+
     for m in messages:
         if isinstance(m, BaseMessage):
             lc_messages.append(m)
+        
         elif isinstance(m, dict):
             role = m.get("role", "user").lower()
             content = m.get("content", "")
+
             if role == "system":
                 lc_messages.append(SystemMessage(content=content))
             elif role == "assistant":
                 lc_messages.append(AIMessage(content=content))
             else:
                 lc_messages.append(HumanMessage(content=content))
+        
         else:
             lc_messages.append(HumanMessage(content=str(m)))
+    
     return lc_messages
 
 class OpenRouterProvider(BaseLLMProvider):
@@ -53,20 +59,18 @@ class OpenRouterProvider(BaseLLMProvider):
         )
 
     @traceable(run_type="llm", name="OpenRouter")
-    async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
+    async def generate_stream(self, messages: list[dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
         llm = self.llm
         try:
             async for chunk in llm.astream(lc_messages, **kwargs):
                 yield chunk
         except Exception as e:
-            LLM_LOGGER.error(
-                "OpenRouter error during generate_stream: %s", e, exc_info=True
-            )
-            raise ExternalServiceError(f"OpenRouter generation failed: {str(e)}")
+            LLM_LOGGER.error("OpenRouter error during generate_stream: %s", e, exc_info=True)
+            raise ExternalServiceError(f"OpenRouter generation failed: {e}") from e
 
     @traceable(run_type="llm", name="OpenRouter_Structured")
-    async def generate_structured(self, messages: List[Dict], schema: type, **kwargs):
+    async def generate_structured(self, messages: list[dict], schema: type, **kwargs):
         lc_messages = _convert_messages(messages)
         parser = PydanticOutputParser(pydantic_object=schema)
         
@@ -80,7 +84,9 @@ class OpenRouterProvider(BaseLLMProvider):
             return parser.invoke(response)
         except Exception as e:
             LLM_LOGGER.error("OpenRouter error during generate_structured: %s", e, exc_info=True)
-            raise ExternalServiceError(f"OpenRouter structured generation failed: {str(e)}")
+            raise ExternalServiceError(
+                f"OpenRouter structured generation failed: {str(e)}"
+            ) from e
 
     async def is_available(self) -> bool:
         try:
@@ -106,7 +112,7 @@ class GeminiProvider(BaseLLMProvider):
         LLM_LOGGER.info("Gemini provider initialized: model=%s", self._config.model)
 
     @traceable(run_type="llm", name="Gemini")
-    async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
+    async def generate_stream(self, messages: list[dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
         llm = self.llm
         try:
@@ -114,17 +120,19 @@ class GeminiProvider(BaseLLMProvider):
                 yield chunk
         except Exception as e:
             LLM_LOGGER.error("Gemini error during generate_stream: %s", e, exc_info=True)
-            raise ExternalServiceError(f"Gemini generation failed: {str(e)}")
+            raise ExternalServiceError(f"Gemini generation failed: {str(e)}") from e
 
     @traceable(run_type="llm", name="Gemini_Structured")
-    async def generate_structured(self, messages: List[Dict], schema: type, **kwargs):
+    async def generate_structured(self, messages: list[dict], schema: type, **kwargs):
         lc_messages = _convert_messages(messages)
         try:
             structured_llm = self.llm.with_structured_output(schema) # type: ignore
             return await structured_llm.ainvoke(lc_messages, **kwargs)
         except Exception as e:
             LLM_LOGGER.error("Gemini error during generate_structured: %s", e, exc_info=True)
-            raise ExternalServiceError(f"Gemini structured generation failed: {str(e)}")
+            raise ExternalServiceError(
+                f"Gemini structured generation failed: {str(e)}"
+            ) from e
 
     async def is_available(self) -> bool:
         try:
@@ -156,7 +164,7 @@ class OllamaProvider(BaseLLMProvider):
         )
 
     @traceable(run_type="llm", name="Ollama")
-    async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
+    async def generate_stream(self, messages: list[dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
         llm = self.llm
         
@@ -165,10 +173,10 @@ class OllamaProvider(BaseLLMProvider):
                 yield chunk
         except Exception as e:
             LLM_LOGGER.error("Ollama error during generate_stream: %s", e, exc_info=True)
-            raise ExternalServiceError(f"Ollama generation failed: {str(e)}")
+            raise ExternalServiceError(f"Ollama generation failed: {str(e)}") from e
 
     @traceable(run_type="llm", name="Ollama_Structured")
-    async def generate_structured(self, messages: List[Dict], schema: type, **kwargs):
+    async def generate_structured(self, messages: list[dict], schema: type, **kwargs):
         lc_messages = _convert_messages(messages)
         parser = PydanticOutputParser(pydantic_object=schema)
         
@@ -182,7 +190,9 @@ class OllamaProvider(BaseLLMProvider):
             return parser.invoke(response)
         except Exception as e:
             LLM_LOGGER.error("Ollama error during generate_structured: %s", e, exc_info=True)
-            raise ExternalServiceError(f"Ollama structured generation failed: {str(e)}")
+            raise ExternalServiceError(
+                f"Ollama structured generation failed: {str(e)}"
+            ) from e
 
     async def is_available(self) -> bool:
         try:
@@ -213,7 +223,7 @@ class OllamaLocalProvider(BaseLLMProvider):
         )
 
     @traceable(run_type="llm", name="Ollama_Local")
-    async def generate_stream(self, messages: List[Dict], **kwargs) -> AsyncIterator[Any]:
+    async def generate_stream(self, messages: list[dict], **kwargs) -> AsyncIterator[Any]:
         lc_messages = _convert_messages(messages)
         llm = self.llm
 
@@ -222,10 +232,10 @@ class OllamaLocalProvider(BaseLLMProvider):
                 yield chunk
         except Exception as e:
             LLM_LOGGER.error("Local Ollama error during generate_stream: %s", e, exc_info=True)
-            raise ExternalServiceError(f"Local Ollama generation failed: {str(e)}")
+            raise ExternalServiceError(f"Local Ollama generation failed: {str(e)}") from e
 
     @traceable(run_type="llm", name="Ollama_Local_Structured")
-    async def generate_structured(self, messages: List[Dict], schema: type, **kwargs):
+    async def generate_structured(self, messages: list[dict], schema: type, **kwargs):
         lc_messages = _convert_messages(messages)
 
         try:
@@ -233,7 +243,7 @@ class OllamaLocalProvider(BaseLLMProvider):
             return await structured_llm.ainvoke(lc_messages, **kwargs)
         except Exception as e:
             LLM_LOGGER.error("Local Ollama error during generate_structured: %s", e, exc_info=True)
-            raise ExternalServiceError(f"Local Ollama structured generation failed: {str(e)}")
+            raise ExternalServiceError(f"Local Ollama structured generation failed: {str(e)}") from e
 
     async def is_available(self) -> bool:
         try:

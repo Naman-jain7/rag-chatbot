@@ -4,8 +4,9 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
-from app.schemas.workflow_schema import ChatRequest
+
 from app.db.manager import db_manager
+from app.schemas.workflow_schema import ChatRequest
 
 router = APIRouter()
 
@@ -130,3 +131,26 @@ async def list_conversations(user_id: int):
         user_id,
     )
     return {"conversations": conversations}
+
+@router.delete("/conversations/{user_id}/{chat_id}")
+async def delete_conversation(user_id: int, chat_id: str):
+    owner = await db_manager.fetch_rows(
+        "SELECT 1 FROM chat_conversations WHERE user_id = $1 AND chat_id = $2",
+        user_id,
+        chat_id,
+    )
+    if not owner:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    await db_manager.execute_command(
+        "DELETE FROM chat_conversations WHERE user_id = $1 AND chat_id = $2",
+        user_id,
+        chat_id,
+    )
+    
+    # Delete associated memory/checkpoints in langgraph
+    await db_manager.execute_command("DELETE FROM checkpoints WHERE thread_id = $1", chat_id)
+    await db_manager.execute_command("DELETE FROM checkpoint_blobs WHERE thread_id = $1", chat_id)
+    await db_manager.execute_command("DELETE FROM checkpoint_writes WHERE thread_id = $1", chat_id)
+    
+    return {"message": "Chat deleted"}

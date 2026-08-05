@@ -1,30 +1,38 @@
 import asyncio
 from asyncio import Queue as AsyncQueue
 from contextvars import ContextVar
-from typing import Optional
 
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_huggingface import HuggingFaceEmbeddings
 from langgraph.graph import END, START, StateGraph
-from langgraph.prebuilt import ToolNode
 from langsmith import traceable
 
 from app.core.config import settings
-from app.schemas.workflow_schema import EvidenceEvaluation, QueryRouter, MemoryDecision
+from app.schemas.workflow_schema import EvidenceEvaluation, ShortTermSufficiency
 from src.graphs.state import GraphState
-from src.graphs.tools import tools
-from src.llm.providers import fast_providers, slow_providers
-from src.llm.resilience import ResilientLLMManager
-from src.memory.long_term_memory import long_term_memory as memory_service
+from src.llm.providers import (  # noqa: F401
+    gemini_llm,
+    ollama_llm,
+    ollama_local_llm,
+    openrouter_llm,
+)
 from src.memory.vector_db_manager import vector_db_manager
+from src.prompts.prompts import (
+    CHECK_SHORT_TERM_PROMPT,
+    EVALUATE_EVIDENCE_PROMPT,
+    GENERATE_ANSWER_PROMPT,
+    REWRITE_QUERY_PROMPT,
+)
+from src.utils.logger import APP_LOGGER, EMBEDDING_LOGGER, LLM_LOGGER
 from src.utils.token_usage import get_token_usage
-from src.prompts.prompts import EVALUATE_EVIDENCE_PROMPT,REWRITE_QUERY_PROMPT,ROUTER_PROMPT,MEMORY_PROMPT,GENERATE_ANSWER_PROMPT
-from src.utils.logger import LLM_LOGGER, MEMORY_LOGGER, APP_LOGGER, EMBEDDING_LOGGER
 
-# ContextVar that carries the streaming queue into generate_answer without
-# touching the checkpointed GraphState (asyncio.Queue is not serialisable).
-_stream_queue_var: ContextVar[Optional[AsyncQueue]] = ContextVar("stream_queue", default=None)
+# ContextVar that carries the streaming queue into generate_answer without touching the checkpointed GraphState (asyncio.Queue is not serialisable).
+_stream_queue_var: ContextVar[AsyncQueue | None] = ContextVar("stream_queue", default=None)
+
+load_dotenv()
+
+# ===================================== HELPER FUNCTIONS =====================================================
 
 _query_embeddings: HuggingFaceEmbeddings | None = None
 
@@ -35,131 +43,77 @@ def _get_query_embeddings() -> HuggingFaceEmbeddings:
         _query_embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_MODEL)
     return _query_embeddings
 
-load_dotenv()
-
-# ==========================================================================================
-
-fast_llm = ResilientLLMManager(providers=fast_providers)  # type: ignore
-slow_llm = ResilientLLMManager(providers=slow_providers)  # type: ignore
-
-# ==========================================================================================
-
-async def retrieve_memories(state: GraphState):
-    print("--- RETRIEVING MEMORIES ---")
-    user_id = state.get("user_id")
-    query = state.get("query") or state.get("original_query")
-    memories = await memory_service.get_relevant(user_id, query) if user_id else ""
-    return {"memories": memories}
-
-# ==========================================================================================
-
 _DOCUMENT_KEYWORDS = {
     "document", "documents", "file", "files", "resume", "cv",
     "report", "pdf", "uploaded", "upload", "attachment", "notes",
-    "according to", "based on", "in my", "from my", "from the",
+    "according to", "based on",
     "what does", "what did", "what is in", "summarise", "summarize",
     "paper", "thesis", "contract", "invoice", "letter",
 }
 
-@traceable(run_type="llm", name="Route query")
-async def route_query(state: GraphState):
-    print("--- ROUTING QUERY ---")
-    query = state.get("query")
-    memory_context = state.get("memories", "")
-    prompt = ROUTER_PROMPT.format(query=query, memory_context=memory_context)
-    msg = [{"role": "user", "content": prompt}]
 
-    try:
-        response = await fast_llm.generate_structured(messages=msg, schema=QueryRouter)
-        route = response.route.value  # type: ignore
-        confidence = response.confidence_score  # type: ignore
-    except Exception as e:
-        LLM_LOGGER.error(f"Error routing query: {e}")
-        route = "retrieve"
-        confidence = 1.0
+def _contains_any_keyword(text: str, keywords: set[str]) -> bool:
+    return any(keyword in text for keyword in keywords)
 
-    print(f"--- ROUTE: {route} | CONFIDENCE: {confidence} ---")
-    return {"route": route, "confidence": confidence}
 
-def route_decision(state: GraphState):
-    query_lower = (state.get("original_query") or state.get("query", "")).lower()
-    route = state.get("route", "retrieve")
-    confidence = state.get("confidence", 0.5)
-    retries = state.get("retries", 0)
+def _is_document_query(state: GraphState) -> bool:
+    query = state.get("query") or state.get("original_query") or ""
+    query_lower = query.lower()
+    return _contains_any_keyword(query_lower, _DOCUMENT_KEYWORDS)
 
-    # Hard override: any query referencing document content must go to retrieve.
-    # This prevents memory from being used when the user explicitly asks about
-    # an uploaded file, even if the LLM router picked "memory".
-    if any(kw in query_lower for kw in _DOCUMENT_KEYWORDS):
-        print("--- ROUTE OVERRIDE → retrieve (document keyword detected) ---")
-        return "retrieve"
 
-    if confidence < 0.5 and retries < 1:
-        return "rewrite"
-
-    if route == "memory":
-        return "generate"
-    elif route == "retrieve":
-        return "retrieve"
-    elif route == "hybrid":
-        return "retrieve"
-    elif route == "tools":
-        return "generate"
-    else:
-        return "retrieve"
-
-def route_evaluation(state: GraphState):
+def _route_after_evaluation(state: GraphState):
     if state.get("evidence_sufficient", False) or state.get("retries", 0) >= 1:
+        return "generate"
+    if not _is_document_query(state):
         return "generate"
     return "rewrite"
 
-def route_tools(state: GraphState):
-    messages = state.get("messages", [])
-    if messages:
-        last_message = messages[-1]
-        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-            return "tools"
-    return "end"
+def _route_after_short_term_check(state: GraphState):
+    if state.get("short_term_sufficient", False):
+        return "generate"
+    return "retrieve"
 
 # ==========================================================================================
 
-async def store_memories(state: GraphState):
-    print("--- STORING MEMORIES ---")
-    user_id = state.get("user_id")
-    query = state.get("original_query")
-    response = state.get("response")
-    if not user_id or not response:
-        return {}
+@traceable(run_type="llm", name="Check short term context")
+async def check_short_term(state: GraphState):
+    print("--- CHECKING SHORT TERM CONTEXT ---")
+    
+    if _is_document_query(state):
+        print("    -> Document query detected, bypassing to retrieval.")
+        return {"short_term_sufficient": False}
+
+    query = state.get("query") or state.get("original_query")
+    messages = state.get("messages", [])
+    
+    # Exclude the very last message which is the current query itself
+    history_msgs = messages[:-1] if messages else []
+    if not history_msgs:
+        return {"short_term_sufficient": False}
+
+    chat_history = ""
+    for msg in history_msgs:
+        role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+        chat_history += f"{role}: {msg.content}\n"
+    
+    prompt = CHECK_SHORT_TERM_PROMPT.format(chat_history=chat_history.strip(), query=query)
+    msg = [{"role": "user", "content": prompt}]
     
     try:
-        existing_raw_memories = await memory_service.get_all_raw_texts(user_id)
-        if existing_raw_memories:
-            user_details = "\n".join([f"- {text}" for text in existing_raw_memories])
-        else:
-            user_details = "No existing memories"
-        
-        prompt = MEMORY_PROMPT.format(query=query, memory_context=user_details)
-        user_msg = f"User Query: {query}\nAssistant Response: {response}"
-        messages = [
-            {"role": "system", "content": prompt},
-            {"role": "user","content": f"Please review this interaction and extract any new memories:\n{user_msg}"},
-        ]
-
-        decision = await fast_llm.generate_structured(messages=messages, schema=MemoryDecision)
-
-        if decision and decision.should_write:
-            new_memories = [m.text for m in decision.memories if m.is_new]
-            if new_memories:
-                await memory_service.store_batch(user_id, new_memories)
+        response = await ollama_local_llm.generate_structured(messages=msg, schema=ShortTermSufficiency)
+        is_sufficient = response.is_sufficient  # type: ignore
     except Exception as e:
-        MEMORY_LOGGER.error(f"Error in store_memories node workflow: {e}")
-    
-    return {}
+        LLM_LOGGER.error(f"Error checking short term context: {e}")
+        is_sufficient = False
+        
+    return {"short_term_sufficient": is_sufficient}
 
 # ==========================================================================================
 
+@traceable(run_type="chain", name="Retrieve documents")
 async def retrieve_docs(state: GraphState):
-    print("--- RETRIEVING DOCS FROM POSTGRES ---")
+    print("--- RETRIEVING DOCS ---")
     user_id = state.get("user_id")
     query = state.get("query") or state.get("original_query")
     retries = state.get("retries", 0)
@@ -199,10 +153,17 @@ async def retrieve_docs(state: GraphState):
         for d in raw_docs
     ]
 
-    context = "\n\n".join([
-        f"Document [{d['metadata']['filename']} - Page {d['metadata']['page_number']}]:\n{d['content']}"
-        for d in docs
-    ])
+    def _format_doc(d: dict) -> str:
+        filename = d['metadata']['filename']
+        page_num = d['metadata']['page_number']
+        is_audio = str(filename).lower().endswith(('.m4a', '.mp3', '.wav', '.ogg', '.flac'))
+        
+        if is_audio or page_num in (None, "unknown", "", 0, -1):
+            return f"Document [{filename}]:\n{d['content']}"
+        else:
+            return f"Document [{filename} - Page {page_num}]:\n{d['content']}"
+
+    context = "\n\n".join([_format_doc(d) for d in docs])
     return {"raw_documents": docs, "final_context": context, "retries": retries}
 
 # ==========================================================================================
@@ -221,7 +182,7 @@ async def evaluate_evidence(state: GraphState):
     msg = [{"role": "user", "content": prompt}]
 
     try:
-        response = await fast_llm.generate_structured(messages=msg, schema=EvidenceEvaluation)
+        response = await ollama_local_llm.generate_structured(messages=msg, schema=EvidenceEvaluation)
         evidence_sufficient = response.evidence_sufficient  # type: ignore
     except Exception as e:
         LLM_LOGGER.error(f"Error evaluating evidence: {e}")
@@ -241,7 +202,7 @@ async def rewrite_query(state: GraphState):
 
     try:
         chunks = []
-        async for chunk in slow_llm.generate_stream(messages=msg):
+        async for chunk in ollama_local_llm.generate_stream(messages=msg):
             chunks.append(chunk.content if hasattr(chunk, "content") else str(chunk))
         rewritten_query = "".join(chunks).strip()
     except Exception as e:
@@ -257,11 +218,10 @@ async def generate_answer(state: GraphState):
     print("--- GENERATING ANSWER ---")
     query = state.get("query") or state.get("original_query")
     context = state.get("final_context", "")
-    memory_context = state.get("memories", "")
     chat_id = state.get("chat_id", "")
     user_id = state.get("user_id", "")
 
-    formatted_system_prompt = GENERATE_ANSWER_PROMPT.format(query=query, context=context, memory_context=memory_context)
+    formatted_system_prompt = GENERATE_ANSWER_PROMPT.format(query=query, context=context)
 
     system_message = SystemMessage(content=formatted_system_prompt)
     
@@ -274,7 +234,7 @@ async def generate_answer(state: GraphState):
     stream_queue = _stream_queue_var.get()
     try:
         chunks = []
-        async for chunk in fast_llm.generate_stream(messages=llm_messages):  # type: ignore
+        async for chunk in ollama_local_llm.generate_stream(messages=llm_messages):  # type: ignore
             chunks.append(chunk)
             if chunk.content and stream_queue is not None:
                 await stream_queue.put(chunk.content)
@@ -305,39 +265,30 @@ async def generate_answer(state: GraphState):
     
     return {"messages": [final_message], "response": content, "token_usage": usage}
 
-# ==========================================================================================
+# ===================================== GRAPH =====================================================
 
 workflow = StateGraph(GraphState)
 
-workflow.add_node("route_query", route_query)
-workflow.add_node("retrieve_memories", retrieve_memories)
+workflow.add_node("check_short_term", check_short_term)
 workflow.add_node("retrieve", retrieve_docs)
 workflow.add_node("evaluate", evaluate_evidence)
 workflow.add_node("rewrite", rewrite_query)
 workflow.add_node("generate", generate_answer)
-workflow.add_node("tools", ToolNode(tools))
-workflow.add_node("store_memories", store_memories)
 
 
-workflow.add_edge(START, "retrieve_memories")
-workflow.add_edge("retrieve_memories", "route_query")
-
+workflow.add_edge(START, "check_short_term")
 workflow.add_conditional_edges(
-    "route_query", 
-    route_decision, 
-    {
-        "rewrite": "rewrite",
-        "retrieve": "retrieve",
-        "generate": "generate"
-    }
+    "check_short_term",
+    _route_after_short_term_check,
+    {"generate": "generate", "retrieve": "retrieve"}
 )
-
 workflow.add_edge("retrieve", "evaluate")
-workflow.add_conditional_edges("evaluate", route_evaluation, {"generate": "generate", "rewrite": "rewrite"})
-workflow.add_edge("rewrite", "retrieve_memories")
-
-workflow.add_conditional_edges("generate",route_tools,{"tools": "tools", "end": "store_memories"})
-workflow.add_edge("tools", "generate")
-workflow.add_edge("store_memories", END)
+workflow.add_conditional_edges(
+    "evaluate", 
+    _route_after_evaluation, 
+    {"generate": "generate", "rewrite": "rewrite"}
+)
+workflow.add_edge("rewrite", "retrieve")
+workflow.add_edge("generate", END)
 
 graph = workflow.compile()  # compiled without checkpointer as a safe default
