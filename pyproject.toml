@@ -43,3 +43,9 @@ dev = [
 
 [tool.uv]
 package = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = [
+    "E501", # Line too long
+]
