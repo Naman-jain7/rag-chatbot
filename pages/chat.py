@@ -6,7 +6,6 @@ from streamlit_ui import api_client
 from streamlit_ui.auth import require_authentication
 from streamlit_ui.styles import page_header
 
-
 require_authentication()
 
 META_PREFIX = "\n__META__"
@@ -62,9 +61,25 @@ with st.sidebar:
 
     for conv in conv_list:
         label = conv["title"]
-        if st.button(label, key=f"conv-{conv['id']}", use_container_width=True):
-            _load_conversation(conv["id"])
-            st.rerun()
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            if st.button(label, key=f"conv-{conv['id']}", use_container_width=True):
+                _load_conversation(conv["id"])
+                st.rerun()
+        with col2:
+            if st.button("🗑️", key=f"del-{conv['id']}", help="Delete chat"):
+                try:
+                    api_client.delete_chat(
+                        st.session_state["access_token"],
+                        st.session_state["user_id"],
+                        conv["id"]
+                    )
+                    st.session_state["conversations"] = [c for c in st.session_state["conversations"] if c["id"] != conv["id"]]
+                    if st.session_state.get("chat_id") == conv["id"]:
+                        _new_chat()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to delete chat: {e}")
 
 # ── Main chat area ─────────────────────────────────────────────────────────────
 header, action = st.columns([5, 1])

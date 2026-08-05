@@ -50,18 +50,7 @@ async def lifespan(app: FastAPI):
                 PRIMARY KEY (user_id, chat_id)
             );
         """)
-        await db_manager.execute_command("""
-            CREATE TABLE IF NOT EXISTS memories (
-                id UUID PRIMARY KEY,
-                user_id INT REFERENCES users(id) ON DELETE CASCADE,
-                memory_text TEXT NOT NULL,
-                memory_type VARCHAR(50),
-                importance_score FLOAT DEFAULT 0,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW(),
-                metadata JSONB
-            );
-        """)
+
         APP_LOGGER.info("Base database tables verified.")
     except Exception as e:
         APP_LOGGER.error(f"Failed to create base tables: {e}")
@@ -92,12 +81,7 @@ async def lifespan(app: FastAPI):
             CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_doc_chunks_fts
             ON document_chunks USING gin (fts);
         """)
-        await db_manager.execute_command(f"""
-            CREATE TABLE IF NOT EXISTS memory_embeddings (
-                memory_id UUID PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
-                embedding VECTOR({settings.embedding.EMBEDDING_DIMENSION})
-            );
-        """)
+
         await db_manager.execute_command("""
             CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_doc_chunks_embedding_hnsw
             ON document_chunks
@@ -109,8 +93,7 @@ async def lifespan(app: FastAPI):
         APP_LOGGER.warning(f"Could not initialize vector tables (pgvector may be missing): {e}")
 
     # ── 4. AsyncPostgresSaver (LangGraph short-term / checkpointer memory) ────
-    # AsyncPostgresSaver requires its own psycopg3 connection pool (it cannot
-    # share the asyncpg pool used by db_manager).
+    # AsyncPostgresSaver requires its own psycopg3 connection pool (it cannot share the asyncpg pool used by db_manager).
     cp_pool = None
     try:
         from psycopg_pool import AsyncConnectionPool

@@ -3,7 +3,6 @@ import streamlit as st
 from streamlit_ui.auth import init_session, is_authenticated
 from streamlit_ui.styles import apply_styles
 
-
 st.set_page_config(
 page_title="DocChat",
     page_icon="DC",
@@ -21,7 +20,6 @@ if is_authenticated():
             st.Page("pages/chat.py", title="Chat", icon=":material/forum:"),
         ],
         "Account": [
-            st.Page("pages/memories.py", title="Memories", icon=":material/psychology:"),
             st.Page("pages/settings.py", title="Settings", icon=":material/settings:"),
         ],
     }
