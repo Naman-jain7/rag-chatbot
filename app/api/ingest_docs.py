@@ -30,7 +30,7 @@ def _get_embeddings() -> HuggingFaceEmbeddings:
 @router.post("/upload")
 async def upload_document(
     user_id: int = Form(...),
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008
     version_id: str = Form("1.0"),
 ):
     """
@@ -137,7 +137,7 @@ async def upload_document(
 
         # ── Build chunks_data for VectorDBManager ────────────────────────────
         chunks_data = []
-        for chunk, embedding in zip(chunks, embeddings):
+        for chunk, embedding in zip(chunks, embeddings, strict=False):
             page_number = chunk.metadata.get("page", 0)
             chunks_data.append({
                 "chunk_text": chunk.page_content,
@@ -171,7 +171,7 @@ async def upload_document(
         raise http_exc
     except Exception as e:
         APP_LOGGER.error(f"Error during ingestion: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))  # noqa: B904
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)

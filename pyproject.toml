@@ -48,4 +48,6 @@ package = true
 select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
 ignore = [
     "E501", # Line too long
+    "I001", # unsorted imports
+    "F401", # imported but unused
 ]

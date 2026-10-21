@@ -1,6 +1,4 @@
 """
-src/audio/chunker.py
---------------------
 Segment-grouping chunker for Whisper transcripts.
 
 Strategy
@@ -11,11 +9,10 @@ characters worth of segments to form the next chunk's seed, preserving
 natural speech-pause boundaries exactly as Whisper detected them.
 
 Each output chunk is a dict::
-
     {
         "chunk_text":  "..transcript text for this chunk..",
         "start_time":  0.0,      # start of first segment in chunk (seconds)
-        "end_time":    30.4,     # end   of last  segment in chunk (seconds)
+        "end_time":    30.4,     # end of last segment in chunk (seconds)
         "chunk_index": 0,
     }
 """
@@ -30,6 +27,7 @@ def _format_ts(seconds: float) -> str:
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     s = seconds % 60
+    
     return f"{h}:{m:02d}:{s:06.3f}"
 
 
@@ -127,6 +125,7 @@ class AudioChunker:
             "start_time":  segs[0]["start"],
             "end_time":    segs[-1]["end"],
             "chunk_index": index,
+            
             # Human-readable timestamp range stored as page_range in DB
             "page_range":  f"{_format_ts(segs[0]['start'])}–{_format_ts(segs[-1]['end'])}",
         }

@@ -1,5 +1,3 @@
-from typing import Optional
-
 from fastapi import APIRouter, HTTPException, Query
 
 from app.db.manager import db_manager
@@ -11,7 +9,7 @@ router = APIRouter()
 @router.get("/documents/{user_id}")
 async def list_documents(
     user_id: int,
-    type: Optional[str] = Query(
+    type: str | None = Query(
         default=None,
         description="Filter by source type: 'document' or 'audio'. Omit for all.",
     ),
@@ -61,4 +59,4 @@ async def list_documents(
         raise http_exc
     except Exception as e:
         APP_LOGGER.error(f"Failed to fetch documents for user {user_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch documents")
+        raise HTTPException(status_code=500, detail="Failed to fetch documents")  # noqa: B904

@@ -1,7 +1,7 @@
 import re
-from typing import Any, Dict
+from typing import Any
 
-def format_citations(state: Dict[str, Any]) -> str:
+def format_citations(state: dict[str, Any]) -> str:
     """
     Extracts inline citations like [filename.ext - Page X] from the LLM response
     and formats them into a neat reference list at the bottom.

@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional, Any, Annotated
+from typing import Any, Annotated
 
 load_dotenv()
 
@@ -14,17 +14,17 @@ class LLMSettings(BaseSettings):
 
     OPENROUTER_PROVIDER_NAME: Annotated[str, Field(default='openrouter', validation_alias="OPENROUTER_PROVIDER_NAME")]
     OPENROUTER_MODEL_NAME: Annotated[str, Field(..., validation_alias="OPENROUTER_MODEL_NAME")]
-    OPENROUTER_API_KEY: Annotated[Optional[str], Field(..., validation_alias="OPENROUTER_API_KEY")]
+    OPENROUTER_API_KEY: Annotated[str | None, Field(..., validation_alias="OPENROUTER_API_KEY")]
     OPENROUTER_PRIORITY: Annotated[int, Field(..., validation_alias="OPENROUTER_PRIORITY")]
 
     GEMINI_PROVIDER_NAME: Annotated[str, Field(default='gemini', validation_alias="GEMINI_PROVIDER_NAME")]
     GEMINI_MODEL_NAME: Annotated[str, Field(..., validation_alias="GEMINI_MODEL_NAME")]
-    GOOGLE_API_KEY: Annotated[Optional[str], Field(..., validation_alias="GOOGLE_API_KEY")]
+    GOOGLE_API_KEY: Annotated[str | None, Field(..., validation_alias="GOOGLE_API_KEY")]
     GEMINI_PRIORITY: Annotated[int, Field(..., validation_alias="GEMINI_PRIORITY")]
 
     OLLAMA_PROVIDER_NAME: Annotated[str, Field(default='ollama', validation_alias="OLLAMA_PROVIDER_NAME")]
     OLLAMA_MODEL_NAME: Annotated[str, Field(..., validation_alias="OLLAMA_MODEL_NAME")]
-    OLLAMA_API_KEY: Annotated[Optional[str], Field(..., validation_alias="OLLAMA_API_KEY")]
+    OLLAMA_API_KEY: Annotated[str | None, Field(..., validation_alias="OLLAMA_API_KEY")]
     OLLAMA_PRIORITY: Annotated[int, Field(..., validation_alias="OLLAMA_PRIORITY")]
 
     OLLAMA_LOCAL_PROVIDER_NAME: str = Field(..., validation_alias="OLLAMA_LOCAL_PROVIDER_NAME")
@@ -105,7 +105,7 @@ class EmbeddingSettings(BaseSettings):
         return self
 
 class DatabaseConfig(BaseSettings):
-    DB_DSN: Optional[str] = Field("", validation_alias="DB_DSN")
+    DB_DSN: str | None = Field("", validation_alias="DB_DSN")
 
     @model_validator(mode="before")
     @classmethod
