@@ -1,5 +1,6 @@
 """
 Segment-grouping chunker for Whisper transcripts.
+whisper returns segments (short phrases or complete sentences) with start and end timestamps. Segment-grouping chunking gathers these whole segments together until a certain point(here 1000 chars). while creating overlap, it steps back by entire spoken segments.
 
 Strategy
 --------

@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import os
 import tempfile
@@ -6,25 +5,14 @@ import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import HTMLHeaderTextSplitter, Language, MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
-from app.core.config import settings
 from app.db.manager import db_manager
+from src.memory.embeddings import embed_documents
 from src.memory.vector_db_manager import vector_db_manager
 from src.utils.logger import APP_LOGGER
 
 router = APIRouter()
-
-_embeddings: HuggingFaceEmbeddings | None = None
-
-
-def _get_embeddings() -> HuggingFaceEmbeddings:
-    global _embeddings
-    if _embeddings is None:
-        APP_LOGGER.info("Loading HuggingFaceEmbeddings for document ingestion...")
-        _embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_MODEL)
-    return _embeddings
 
 
 @router.post("/upload")
@@ -34,8 +22,7 @@ async def upload_document(
     version_id: str = Form("1.0"),
 ):
     """
-    Ingests a document, splits it into chunks, generates embeddings,
-    and stores everything in PostgreSQL (document_chunks via pgvector).
+    Ingests a document, splits it into chunks, generates embeddings, and stores everything in PostgreSQL (document_chunks via pgvector).
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename missing")
@@ -132,8 +119,7 @@ async def upload_document(
 
         # ── Embedding ────────────────────────────────────────────────────────
         texts = [chunk.page_content for chunk in chunks]
-        embeddings_model = await asyncio.to_thread(_get_embeddings)
-        embeddings = await asyncio.to_thread(embeddings_model.embed_documents, texts)
+        embeddings = await embed_documents(texts)
 
         # ── Build chunks_data for VectorDBManager ────────────────────────────
         chunks_data = []

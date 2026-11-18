@@ -6,7 +6,6 @@ from src.utils.logger import APP_LOGGER
 
 router = APIRouter()
 
-
 @router.post("/delete")
 async def delete_docs(user_id: int, filenames: list[str] = Body(...)):  # noqa: B008
     """

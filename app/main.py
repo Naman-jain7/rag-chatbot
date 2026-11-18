@@ -7,8 +7,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
-from app.core.config import settings
+from configs.core import settings
 from app.db.manager import db_manager
+from src.memory.redis_cache import redis_cache
 from src.utils.exception import AppException
 from src.utils.logger import APP_LOGGER, EMBEDDING_LOGGER
 
@@ -20,6 +21,7 @@ if sys.platform == "win32":
 async def lifespan(app: FastAPI):
     # ── 1. asyncpg pool (app-level queries) ──────────────────────────────────
     await db_manager.connect()
+    await redis_cache.connect()
 
     # ── 2. Base SQL tables (no pgvector required) ─────────────────────────────
     try:
@@ -133,8 +135,8 @@ async def lifespan(app: FastAPI):
 
     # ── 5. Pre-warm embedding model ───────────────────────────────────────────
     try:
-        from langchain_huggingface import HuggingFaceEmbeddings
-        await asyncio.to_thread(HuggingFaceEmbeddings, model_name=settings.embedding.EMBEDDING_MODEL)
+        from src.memory.embeddings import get_embeddings_model
+        await asyncio.to_thread(get_embeddings_model)
         EMBEDDING_LOGGER.info("Embedding model pre-loaded successfully.")
     except Exception as e:
         EMBEDDING_LOGGER.warning(f"Could not pre-load embedding model: {e}")
@@ -144,6 +146,7 @@ async def lifespan(app: FastAPI):
     # ── 6. Shutdown ───────────────────────────────────────────────────────────
     if cp_pool is not None:
         await cp_pool.close()
+    await redis_cache.disconnect()
     await db_manager.disconnect()
 
 

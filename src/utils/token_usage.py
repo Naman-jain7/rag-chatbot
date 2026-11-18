@@ -1,5 +1,5 @@
 from langsmith import Client
-from app.core.config import settings
+from configs.core import settings
 
 def get_token_usage(user_id: int | str, session_id: str)->dict:
     client = Client()

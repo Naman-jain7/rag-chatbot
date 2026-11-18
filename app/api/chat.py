@@ -17,6 +17,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest):
     # Graph is compiled at startup with the real AsyncPostgresSaver and stored on app.state; fall back to the module-level graph if something went wrong.
     import src.graphs.chains as chains_module
     from src.graphs.chains import _stream_queue_var
+    
     graph = getattr(request.app.state, "graph", chains_module.graph)
     chat_id = payload.chat_id or str(uuid.uuid4())
     await db_manager.execute_command(

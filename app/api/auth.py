@@ -6,7 +6,7 @@ import jwt
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.core.config import settings
+from configs.core import settings
 from app.db.manager import db_manager
 from app.schemas.user_profile import TokenResponse, UserSignup
 from src.utils.exception import AppException, ConflictError, UnauthenticatedError
@@ -19,18 +19,31 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    """
+    - stores the user's ID in 'sub' and email in 'email'
+    - adds an exp timestamp
+    - signs the token using HS256 and secret key
+    """
+
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
+
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
 @router.post("/signup", response_model=dict)
 async def signup(user_data: UserSignup):
-    """Creates a new user account."""
+    """
+    Creates a new user account
+    - accept user details
+    - Check whether email is registered (raise error if yes)
+    - hash the password before saving in db
+    """
     APP_LOGGER.info(f"Signup attempt for email: {user_data.email}")
     
     existing_user = await db_manager.get_user_by_email(user_data.email)
@@ -63,7 +76,13 @@ async def signup(user_data: UserSignup):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):  # noqa: B008
-    """Authenticates a user and returns a JWT token."""
+    """
+    Authenticates a user and returns a JWT token
+    - accept email and password
+    - verify password against bcrypt hash
+    - generates jwt access token if succeeds
+    - returns the token, token type(bearer), user id
+    """
     APP_LOGGER.info(f"Login attempt for email: {form_data.username}")
     
     user = await db_manager.get_user_by_email(form_data.username)
