@@ -1,6 +1,5 @@
 import json
 from datetime import datetime, timedelta
-from typing import Optional
 
 import bcrypt
 import jwt
@@ -17,9 +16,9 @@ router = APIRouter()
 
 SECRET_KEY = settings.app.SECRET_KEY
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -60,10 +59,10 @@ async def signup(user_data: UserSignup):
         
     except Exception as e:
         APP_LOGGER.error(f"Failed to create user: {e}", exc_info=True)
-        raise AppException(message="Failed to create user")
+        raise AppException(message="Failed to create user")  # noqa: B904
 
 @router.post("/login", response_model=TokenResponse)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):  # noqa: B008
     """Authenticates a user and returns a JWT token."""
     APP_LOGGER.info(f"Login attempt for email: {form_data.username}")
     

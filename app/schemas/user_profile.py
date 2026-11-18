@@ -9,11 +9,11 @@ class User(BaseModel):
     Used for request validation, serialization, and type safety.
     """
     user_id: int = Field(..., description="The unique identifier for the user (Primary Key)")
-    full_name: str = Field(...,min_length=1,max_length=100,description="User's full name, cannot be empty",)
+    full_name: str = Field(..., min_length=1, max_length=100, description="User's full name, cannot be empty")
     age: int | None = Field(None, ge=0, le=150, description="User's age, must be a positive integer")
     email: EmailStr = Field(..., max_length=255, description="Unique and validated email address")
     password: str = Field(..., min_length=8, max_length=255, description="Hashed user password string")
-    preferences: dict[str, Any] = Field(default_factory=dict,description="Arbitrary JSON structure representing user preferences",)
+    preferences: dict[str, Any] = Field(default_factory=dict, description="Arbitrary JSON structure representing user preferences")
 
 
 class UserSignup(BaseModel):

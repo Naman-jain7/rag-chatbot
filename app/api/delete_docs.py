@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, Body, HTTPException
 
 from app.db.manager import db_manager
@@ -10,7 +8,7 @@ router = APIRouter()
 
 
 @router.post("/delete")
-async def delete_docs(user_id: int, filenames: List[str] = Body(...)):
+async def delete_docs(user_id: int, filenames: list[str] = Body(...)):  # noqa: B008
     """
     Deletes documents from Postgres (document_chunks and user_documents tables)
     matching the given filenames for the specified user.
@@ -47,4 +45,4 @@ async def delete_docs(user_id: int, filenames: List[str] = Body(...)):
         raise http_exc
     except Exception as e:
         APP_LOGGER.error(f"Error during document deletion for user {user_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))  # noqa: B904

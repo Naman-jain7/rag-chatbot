@@ -8,7 +8,7 @@ class EvidenceEvaluation(BaseModel):
 
 class ChatRequest(BaseModel):
     user_id: int
-    chat_id: Optional[str] = None
+    chat_id: str | None = None
     query: str
 
 class ShortTermSufficiency(BaseModel):

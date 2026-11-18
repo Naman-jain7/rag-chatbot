@@ -14,8 +14,7 @@ router = APIRouter()
 @router.post("/stream")
 async def chat_endpoint(request: Request, payload: ChatRequest):
     """Stream an answer from the LangGraph RAG pipeline."""
-    # Graph is compiled at startup with the real AsyncPostgresSaver and stored
-    # on app.state; fall back to the module-level graph if something went wrong.
+    # Graph is compiled at startup with the real AsyncPostgresSaver and stored on app.state; fall back to the module-level graph if something went wrong.
     import src.graphs.chains as chains_module
     from src.graphs.chains import _stream_queue_var
     graph = getattr(request.app.state, "graph", chains_module.graph)
@@ -56,9 +55,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest):
         try:
             async def run_graph():
                 try:
-                    # Bind the queue to the ContextVar so generate_answer can
-                    # stream chunks without putting the Queue in GraphState
-                    # (which would fail msgpack serialisation in the checkpointer).
+    # Bind the queue to the ContextVar so generate_answer can stream chunks without putting the Queue in GraphState (which would fail msgpack serialisation in the checkpointer).
                     _stream_queue_var.set(queue)
                     final_state = await graph.ainvoke(initial_state, config=config)  # type: ignore
                     
@@ -81,9 +78,12 @@ async def chat_endpoint(request: Request, payload: ChatRequest):
 
             while True:
                 chunk = await queue.get()
+                
                 if chunk is None:
                     break
+                
                 yield chunk
+        
         except Exception as e:
             yield f"Error: {str(e)}"
 
@@ -101,9 +101,7 @@ async def get_chat_history(request: Request, user_id: int | str, chat_id: str):
         raise ResourceNotFoundError("Conversation not found")
 
     if not getattr(request.app.state, "checkpointer_ready", False):
-        raise ExternalServiceError(
-            "Chat history is unavailable because the LangGraph checkpointer did not initialize."
-        )
+        raise ExternalServiceError("Chat history is unavailable because the LangGraph checkpointer did not initialize.")
 
     import src.graphs.chains as chains_module
     graph = getattr(request.app.state, "graph", chains_module.graph)
