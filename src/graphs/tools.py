@@ -1,7 +1,7 @@
 from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 import requests
-from app.core.config import settings
+from configs.core import settings
 
 search_tool = DuckDuckGoSearchRun()
 

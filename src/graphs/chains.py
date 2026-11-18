@@ -4,26 +4,17 @@ from contextvars import ContextVar
 
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_huggingface import HuggingFaceEmbeddings
 from langgraph.graph import END, START, StateGraph
 from langsmith import traceable
 
-from app.core.config import settings
-from app.schemas.workflow_schema import EvidenceEvaluation, ShortTermSufficiency
+from app.schemas.workflow_schema import (EvidenceEvaluation, ShortTermSufficiency)
+
+from llm.prompts import (CHECK_SHORT_TERM_PROMPT, EVALUATE_EVIDENCE_PROMPT, GENERATE_ANSWER_PROMPT, REWRITE_QUERY_PROMPT)
+
 from src.graphs.state import GraphState
-from src.llm.providers import (  # noqa: F401
-    gemini_llm,
-    ollama_llm,
-    ollama_local_llm,
-    openrouter_llm,
-)
+from src.llm import ollama, ollama_cloud, openrouter
+from src.memory.embeddings import embed_query
 from src.memory.vector_db_manager import vector_db_manager
-from src.prompts.prompts import (
-    CHECK_SHORT_TERM_PROMPT,
-    EVALUATE_EVIDENCE_PROMPT,
-    GENERATE_ANSWER_PROMPT,
-    REWRITE_QUERY_PROMPT,
-)
 from src.utils.logger import APP_LOGGER, EMBEDDING_LOGGER, LLM_LOGGER
 from src.utils.token_usage import get_token_usage
 
@@ -32,16 +23,11 @@ _stream_queue_var: ContextVar[AsyncQueue | None] = ContextVar("stream_queue", de
 
 load_dotenv()
 
+ollama_llm = ollama.OllamaProvider()
+ollama_cloud_llm = ollama_cloud.OllamaCloudProvider()
+openrouter_llm = openrouter.OpenRouterProvider()
+
 # ===================================== HELPER FUNCTIONS =====================================================
-
-_query_embeddings: HuggingFaceEmbeddings | None = None
-
-def _get_query_embeddings() -> HuggingFaceEmbeddings:
-    global _query_embeddings
-    if _query_embeddings is None:
-        LLM_LOGGER.info("Loading HuggingFaceEmbeddings for query encoding...")
-        _query_embeddings = HuggingFaceEmbeddings(model_name=settings.embedding.EMBEDDING_MODEL)
-    return _query_embeddings
 
 _DOCUMENT_KEYWORDS = {
     "document", "documents", "file", "files", "resume", "cv",
@@ -101,7 +87,7 @@ async def check_short_term(state: GraphState):
     msg = [{"role": "user", "content": prompt}]
     
     try:
-        response = await ollama_local_llm.generate_structured(messages=msg, schema=ShortTermSufficiency)
+        response = await ollama_llm.agenerate_structured(messages=msg, schema=ShortTermSufficiency)
         is_sufficient = response.is_sufficient  # type: ignore
     except Exception as e:
         LLM_LOGGER.error(f"Error checking short term context: {e}")
@@ -123,12 +109,10 @@ async def retrieve_docs(state: GraphState):
 
     matched_filenames = await vector_db_manager.find_matching_filenames(user_id, query)
     if matched_filenames:
-        # Whole-document requests such as "summarise resume 1" need all chunks
-        # in source order, not only the five chunks preferred by a reranker.
+        # Whole-document requests such as "summarise resume 1" need all chunks in source order, not only the five chunks preferred by a reranker.
         raw_docs = await vector_db_manager.get_document_chunks(user_id, matched_filenames)
     else:
-        embeddings_model = await asyncio.to_thread(_get_query_embeddings)
-        query_embedding = await asyncio.to_thread(embeddings_model.embed_query, query)
+        query_embedding = await embed_query(query)
         raw_docs = await vector_db_manager.retrieve_and_rerank(
             user_id=user_id,
             query_text=query,
@@ -182,7 +166,7 @@ async def evaluate_evidence(state: GraphState):
     msg = [{"role": "user", "content": prompt}]
 
     try:
-        response = await ollama_local_llm.generate_structured(messages=msg, schema=EvidenceEvaluation)
+        response = await ollama_llm.agenerate_structured(messages=msg, schema=EvidenceEvaluation)
         evidence_sufficient = response.evidence_sufficient  # type: ignore
     except Exception as e:
         LLM_LOGGER.error(f"Error evaluating evidence: {e}")
@@ -202,8 +186,8 @@ async def rewrite_query(state: GraphState):
 
     try:
         chunks = []
-        async for chunk in ollama_local_llm.generate_stream(messages=msg):
-            chunks.append(chunk.content if hasattr(chunk, "content") else str(chunk))
+        async for chunk in ollama_llm.astream(messages=msg):
+            chunks.append(chunk)
         rewritten_query = "".join(chunks).strip()
     except Exception as e:
         LLM_LOGGER.error(f"Error rewriting query: {e}")

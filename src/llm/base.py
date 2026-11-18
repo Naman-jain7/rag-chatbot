@@ -1,13 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, Any
+from typing import Any
+from collections.abc import AsyncIterator
 from src.llm.config import ProviderConfig
 
 
 class BaseLLMProvider(ABC):
+    @abstractmethod
     def __init__(self, config: ProviderConfig) -> None:
         pass
 
     @property
+    @abstractmethod
     def name(self) -> str:  # type:ignore
         pass
 
@@ -24,5 +27,6 @@ class BaseLLMProvider(ABC):
         pass
 
     @property
+    @abstractmethod
     def config(self) -> ProviderConfig:  # type:ignore
         pass
