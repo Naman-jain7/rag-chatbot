@@ -1,27 +1,30 @@
-.env
-.venv/
-.streamlit/
-__pycache__/
-*.pyc
-.DS_Store
-*.egg-info/
-
-
-*.bin
-*.gguf
-
-
-.langchain.log
-logs/
-graphify-out/
-
-
+# my folders
+personal/
 /data/vector_db/*
 !/data/vector_db/.gitkeep
-personal/
 data/
 
-
+# my files
+.env
 rough.py
 audio.m4a
 AGENTS.md
+
+# logs
+logs/
+.langchain.log
+
+# tools
+graphify-out/
+.graphifyignore
+
+# standard python
+.venv/
+
+.streamlit/
+__pycache__/
+*.egg-info/
+*.bin
+*.pyc
+.DS_Store
+*.gguf

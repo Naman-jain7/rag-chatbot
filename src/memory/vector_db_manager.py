@@ -6,8 +6,9 @@ from typing import List, Dict, Any
 from sentence_transformers import CrossEncoder
 
 from app.db.manager import db_manager
-from src.utils.logger import EMBEDDING_LOGGER
-from app.core.config import settings
+from src.memory.redis_cache import redis_cache
+from src.utils.logger import EMBEDDING_LOGGER, MEMORY_LOGGER
+from configs.core import settings
 
 class VectorDBManager:
     """
@@ -73,6 +74,7 @@ class VectorDBManager:
         try:
             await db_manager.execute_many(query, args_list)
             EMBEDDING_LOGGER.info("Execute_many completed successfully.")
+            await redis_cache.invalidate_user_search(user_id)
         except Exception as e:
             EMBEDDING_LOGGER.error(f"DATABASE INSERT FAILED: {str(e)}", exc_info=True)
             raise e
@@ -82,6 +84,7 @@ class VectorDBManager:
         query = "DELETE FROM document_chunks WHERE user_id = $1 AND doc_id = $2"
         await db_manager.execute_command(query, user_id, doc_id)
         EMBEDDING_LOGGER.info(f"Deleted document chunks for user {user_id}, doc {doc_id}.")
+        await redis_cache.invalidate_user_search(user_id)
 
     @staticmethod
     def _normalise_filename(value: str) -> str:
@@ -118,10 +121,14 @@ class VectorDBManager:
         """Load every chunk for explicitly named documents in source order."""
         if not filenames:
             return []
-        
-        filenames_lower = [f.lower() for f in filenames]
 
-        return await db_manager.fetch_rows(
+        cache_parts = (settings.embedding.EMBEDDING_MODEL, ",".join(sorted(filenames)))
+        cached = await redis_cache.get_search_results(user_id, "filename", *cache_parts)
+        if cached is not None:
+            MEMORY_LOGGER.info("Filename search cache hit for user %s", user_id)
+            return cached
+
+        rows = await db_manager.fetch_rows(
             """
             SELECT id, chunk_text, section_id, filename, page_number,
                    1.0::float AS vector_score, 0.0::float AS fts_score,
@@ -133,11 +140,19 @@ class VectorDBManager:
             user_id,
             filenames,
         )
+        await redis_cache.set_search_results(user_id, "filename", rows, *cache_parts)
+        return rows
 
     async def retrieve_and_rerank(self, user_id: int, query_text: str, query_embedding: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
         """
         Retrieves chunks using hybrid search (Vector + BM25) and reranks using a cross-encoder.
         """
+        cache_parts = (settings.embedding.EMBEDDING_MODEL, query_text, str(top_k))
+        cached = await redis_cache.get_search_results(user_id, "hybrid", *cache_parts)
+        if cached is not None:
+            MEMORY_LOGGER.info("Hybrid search cache hit for user %s", user_id)
+            return cached
+
         # 1. Vector Search (Top 20)
         vector_query = """
             SELECT id, chunk_text, section_id, filename, page_number, 
@@ -194,6 +209,8 @@ class VectorDBManager:
         # Sort by rerank score
         candidates.sort(key=lambda x: x['rerank_score'], reverse=True)
 
-        return candidates[:top_k]
+        ranked = candidates[:top_k]
+        await redis_cache.set_search_results(user_id, "hybrid", ranked, *cache_parts)
+        return ranked
 
 vector_db_manager = VectorDBManager()

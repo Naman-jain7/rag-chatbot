@@ -4,7 +4,7 @@
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg_pool import AsyncConnectionPool
-from app.core.config import settings
+from configs.core import settings
 
 
 async def build_checkpointer(pool: AsyncConnectionPool) -> AsyncPostgresSaver:
